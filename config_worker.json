@@ -1,0 +1,38 @@
+{
+    "auth_token": [ "12345678912345678912" ],
+    "action_driver": "fake",
+    "db_url": "sqlite:///test.db",
+    "node_prop": [
+        "name", "type", "ip"
+    ],
+    "raspberry_prop": [
+        "port_number", "switch", "model", "id"
+    ],
+    "switch_prop": [
+        "name", "ip", "community", "port_nb", "master_port", "oid", "oid_offset"
+    ],
+    "env_prop": [
+        "name", "type", "desc", "img_name", "img_size", "sector_start", "ssh_user",
+        "shell", "web", "script_test"
+    ],
+    "configure_prop": {
+        "raspberry": {
+            "environment": { "values": [], "mandatory": true },
+            "update_os": { "values": [ "yes", "no" ], "mandatory": true },
+            "part_size": { "values": [ "1gb", "whole" ], "mandatory": true },
+            "name": { "values": [], "mandatory": true },
+            "os_password": { "values": [], "mandatory": false },
+            "duration": { "values": [], "mandatory": true },
+            "ssh_key": { "values": [], "mandatory": true }
+        },
+        "sensor": {
+            "os": { "values": [], "mandatory": true },
+            "duration": { "values": [], "mandatory": true }
+        },
+        "server": {
+            "site": { "values": [], "mandatory": true }, 
+            "os": { "values": [], "mandatory": true },
+            "duration": { "values": [], "mandatory": true }
+        }
+    }
+}

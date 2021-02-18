@@ -1,0 +1,6 @@
+# Python files
+*__pycache__*
+# Log files generated from the worker execution
+*.log
+# Dump of the database
+*.db
