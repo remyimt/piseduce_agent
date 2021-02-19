@@ -2,10 +2,25 @@ from api.auth import auth
 from database.connector import open_session, close_session
 from database.tables import Environment, Node, NodeProperty, Switch 
 from lib.config_loader import load_config
-import flask
+import flask, json
 
 
 admin_v1 = flask.Blueprint("admin_v1", __name__)
+
+
+@admin_v1.route("/switch", methods=["POST"])
+@auth
+def list_switch():
+    db = open_session()
+    # Get the nodes
+    result = {}
+    switches = db.query(Switch).all()
+    for s in switches:
+        if s.name not in result:
+            result[s.name] = {}
+        result[s.name][s.prop_name] = s.prop_value
+    close_session(db)
+    return json.dumps(result)
 
 
 @admin_v1.route("/add-switch", methods=["POST"])
@@ -13,6 +28,7 @@ admin_v1 = flask.Blueprint("admin_v1", __name__)
 def add_switch():
     switch_data = flask.request.json
     switch_props = load_config()["switch_prop"]
+    # Check if all properties belong to the POST data
     no_data = [key_data for key_data in switch_props if key_data not in switch_data.keys()]
     if len(no_data) == 0:
         db = open_session()
@@ -27,7 +43,7 @@ def add_switch():
                 switch_db.prop_value = switch_data[prop]
                 db.add(switch_db)
         close_session(db)
-        return { "switch": "ok" }
+        return { "switch": switch_data["name"] }
     else:
         return {"missing": no_data }
 
@@ -39,6 +55,7 @@ def add_node():
     node_props = load_config()["node_prop"].copy()
     if "type" in node_data:
         node_props += load_config()[node_data["type"] + "_prop"]
+    # Check if all properties belong to the POST data
     no_data = [key_data for key_data in node_props if key_data not in node_data.keys()]
     if len(no_data) == 0:
         db = open_session()
@@ -63,10 +80,9 @@ def add_node():
                 prop_db.prop_value = node_data[prop]
                 db.add(prop_db)
         close_session(db)
-        return { "node": "ok" }
+        return { "node": node_data["name"] }
     else:
         return {"missing": no_data }
-    return { "result": "ok" }
 
 
 @admin_v1.route("/add-environment", methods=["POST"])
@@ -74,6 +90,7 @@ def add_node():
 def add_environment():
     env_data = flask.request.json
     env_props = load_config()["env_prop"]
+    # Check if all properties belong to the POST data
     no_data = [key_data for key_data in env_props if key_data not in env_data.keys()]
     if len(no_data) == 0:
         db = open_session()
@@ -96,7 +113,7 @@ def add_environment():
                     env_db.prop_value = env_data[prop]
                     db.add(env_db)
         close_session(db)
-        return { "env": "ok" }
+        return { "env": env_data["name"] }
     else:
         return {"missing": no_data }
 
@@ -106,6 +123,7 @@ def add_environment():
 def delete():
     data = flask.request.json
     props = ["name", "type" ]
+    # Check if all properties belong to the POST data
     no_data = [key_data for key_data in props if key_data not in data.keys()]
     if len(no_data) == 0:
         if data["type"] == "node":
