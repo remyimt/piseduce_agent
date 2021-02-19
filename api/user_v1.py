@@ -1,6 +1,6 @@
 from api.auth import auth
 from database.connector import open_session, close_session, row2dict
-from database.tables import Node, NodeProperty, ActionProperty
+from database.tables import Environment, Node, NodeProperty, ActionProperty
 from datetime import datetime
 from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, load_config
@@ -20,6 +20,21 @@ def list_node():
     nodes = db.query(Node).all()
     for n in nodes:
         result[n.name] = row2dict(n)
+    close_session(db)
+    return json.dumps(result)
+
+
+@user_v1.route("/env", methods=["POST"])
+@auth
+def list_environment():
+    db = open_session()
+    # Get the nodes
+    result = {}
+    envs = db.query(Environment).all()
+    for e in envs:
+        if e.name not in result:
+            result[e.name] = {}
+        result[e.name][e.prop_name] = e.prop_value
     close_session(db)
     return json.dumps(result)
 
