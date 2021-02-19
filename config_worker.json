@@ -1,19 +1,22 @@
 {
     "auth_token": [ "12345678912345678912" ],
-    "action_driver": "fake",
+    "port_number": 8080,
+    "action_driver": "raspberry",
     "db_url": "sqlite:///test.db",
+    "comments": "Do not forget the ending '/' at the end of the env_path",
+    "env_path": "/root/usb_envs/",
+
     "node_prop": [
         "name", "type", "ip"
     ],
     "raspberry_prop": [
-        "port_number", "switch", "model", "id"
+        "port_number", "switch", "model", "serial"
     ],
     "switch_prop": [
         "name", "ip", "community", "port_nb", "master_port", "oid", "oid_offset"
     ],
     "env_prop": [
-        "name", "type", "desc", "img_name", "img_size", "sector_start", "ssh_user",
-        "shell", "web", "script_test"
+        "name", "type", "desc", "img_name", "img_size", "sector_start", "ssh_user", "web"
     ],
     "configure_prop": {
         "raspberry": {
@@ -23,7 +26,8 @@
             "name": { "values": [], "mandatory": true },
             "os_password": { "values": [], "mandatory": false },
             "duration": { "values": [], "mandatory": true },
-            "ssh_key": { "values": [], "mandatory": true }
+            "ssh_key_1": { "values": [], "mandatory": false },
+            "ssh_key_2": { "values": [], "mandatory": false }
         },
         "sensor": {
             "os": { "values": [], "mandatory": true },

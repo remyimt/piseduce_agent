@@ -7,8 +7,9 @@ class Node(Base):
     type = Column(Text)
     name = Column(Text, primary_key=True)
     ip = Column(Text)
-    status = Column(Text)
     owner = Column(Text)
+    status = Column(Text)
+    lost_state = Column(Text)
     start_date = Column(Text)
 
 
