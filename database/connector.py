@@ -1,5 +1,6 @@
 from database.base import Base, DB_URL, engine, SessionLocal
 from sqlalchemy import inspect
+# Import tables to load the table description
 import database.tables, logging
 
 
@@ -39,3 +40,5 @@ def create_tables():
     if len(tables) == 0:
         logging.info("The database is empty. Create tables...")
         Base.metadata.create_all(engine)
+        return True
+    return False

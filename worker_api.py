@@ -17,5 +17,4 @@ if __name__ == '__main__':
     logging.basicConfig(filename='info_api.log', level=logging.INFO,
         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     port_number = load_config()["port_number"]
-    create_tables()
     worker_api.run(port=port_number, host="0.0.0.0")

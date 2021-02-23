@@ -1,6 +1,5 @@
 from lib.config_loader import load_config
-import flask
-import functools
+import flask, functools
 
 def auth(f):
     @functools.wraps(f)
