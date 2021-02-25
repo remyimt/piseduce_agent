@@ -8,22 +8,7 @@ import flask, json
 admin_v1 = flask.Blueprint("admin_v1", __name__)
 
 
-@admin_v1.route("/switch", methods=["POST"])
-@auth
-def list_switch():
-    db = open_session()
-    # Get the nodes
-    result = {}
-    switches = db.query(Switch).all()
-    for s in switches:
-        if s.name not in result:
-            result[s.name] = {}
-        result[s.name][s.prop_name] = s.prop_value
-    close_session(db)
-    return json.dumps(result)
-
-
-@admin_v1.route("/add-switch", methods=["POST"])
+@admin_v1.route("/add/switch", methods=["POST"])
 @auth
 def add_switch():
     switch_data = flask.request.json
@@ -43,18 +28,18 @@ def add_switch():
                 switch_db.prop_value = switch_data[prop]
                 db.add(switch_db)
         close_session(db)
-        return { "switch": switch_data["name"] }
+        return json.dumps({ "switch": switch_data["name"] })
     else:
-        return {"missing": no_data }
+        return json.dumps({"missing": no_data })
 
 
-@admin_v1.route("/add-node", methods=["POST"])
+@admin_v1.route("/add/node", methods=["POST"])
 @auth
 def add_node():
     node_data = flask.request.json
     node_props = load_config()["node_prop"].copy()
-    if "type" in node_data:
-        node_props += load_config()[node_data["type"] + "_prop"]
+    worker_type = load_config()["action_driver"]
+    node_props += load_config()[worker_type + "_prop"]
     # Check if all properties belong to the POST data
     no_data = [key_data for key_data in node_props if key_data not in node_data.keys()]
     if len(no_data) == 0:
@@ -66,7 +51,7 @@ def add_node():
         for to_del in existing:
             db.delete(to_del)
         node_db = Node()
-        node_db.type = node_data["type"]
+        node_db.type = worker_type
         node_db.name = node_data["name"]
         node_db.ip = node_data["ip"]
         node_db.status = "available"
@@ -85,7 +70,7 @@ def add_node():
         return {"missing": no_data }
 
 
-@admin_v1.route("/add-environment", methods=["POST"])
+@admin_v1.route("/add/environment", methods=["POST"])
 @auth
 def add_environment():
     env_data = flask.request.json
@@ -113,20 +98,20 @@ def add_environment():
                     env_db.prop_value = env_data[prop]
                     db.add(env_db)
         close_session(db)
-        return { "env": env_data["name"] }
+        return { "environment": env_data["name"] }
     else:
         return {"missing": no_data }
 
 
-@admin_v1.route("/delete", methods=["POST"])
+@admin_v1.route("/delete/<el_type>", methods=["POST"])
 @auth
-def delete():
+def delete(el_type):
     data = flask.request.json
-    props = ["name", "type" ]
+    props = [ "name" ]
     # Check if all properties belong to the POST data
     no_data = [key_data for key_data in props if key_data not in data.keys()]
     if len(no_data) == 0:
-        if data["type"] == "node":
+        if el_type == "node":
             db = open_session()
             existing = db.query(Node).filter_by(name = data["name"]).all()
             for to_del in existing:
@@ -135,13 +120,13 @@ def delete():
             for to_del in existing:
                 db.delete(to_del)
             close_session(db)
-        elif data["type"] == "switch":
+        elif el_type == "switch":
             db = open_session()
             existing = db.query(Switch).filter_by(name = data["name"]).all()
             for to_del in existing:
                 db.delete(to_del)
             close_session(db)
-        elif data["type"] == "environment":
+        elif el_type == "environment":
             db = open_session()
             existing = db.query(Environment).filter_by(name = data["name"]).all()
             for to_del in existing:

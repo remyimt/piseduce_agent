@@ -1,16 +1,18 @@
 {
     "auth_token": [ "12345678912345678912" ],
     "port_number": 8080,
-    "action_driver": "raspberry",
+    "action_driver": "fake",
     "db_url": "sqlite:///test.db",
     "comments": "Do not forget the ending '/' at the end of the env_path",
     "env_path": "/root/usb_envs/",
-
-    "node_prop": [
-        "name", "type", "ip"
+    "fake_prop": [
+        "prop1", "prop2"
     ],
     "raspberry_prop": [
         "port_number", "switch", "model", "serial"
+    ],
+    "node_prop": [
+        "name", "ip"
     ],
     "switch_prop": [
         "name", "ip", "community", "port_nb", "master_port", "oid", "oid_offset"

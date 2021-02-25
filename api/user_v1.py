@@ -1,6 +1,6 @@
 from api.auth import auth
 from database.connector import open_session, close_session, row2dict
-from database.tables import Environment, Node, NodeProperty, ActionProperty
+from database.tables import ActionProperty, Environment, Node, NodeProperty, Switch
 from datetime import datetime
 from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, load_config
@@ -11,20 +11,22 @@ import flask, json
 user_v1 = Blueprint("user_v1", __name__)
 
 
-@user_v1.route("/node", methods=["POST"])
+@user_v1.route("/switch", methods=["POST"])
 @auth
-def list_node():
+def list_switch():
     db = open_session()
     # Get the nodes
     result = {}
-    nodes = db.query(Node).all()
-    for n in nodes:
-        result[n.name] = row2dict(n)
+    switches = db.query(Switch).all()
+    for s in switches:
+        if s.name not in result:
+            result[s.name] = {}
+        result[s.name][s.prop_name] = s.prop_value
     close_session(db)
     return json.dumps(result)
 
 
-@user_v1.route("/env", methods=["POST"])
+@user_v1.route("/environment", methods=["POST"])
 @auth
 def list_environment():
     db = open_session()
@@ -39,8 +41,22 @@ def list_environment():
     return json.dumps(result)
 
 
-@user_v1.route("/node-prop", methods=["POST"])
+# Get the list of the nodes
+@user_v1.route("/node", methods=["POST"])
 @auth
+def list_node():
+    db = open_session()
+    # Get the nodes
+    result = {}
+    nodes = db.query(Node).all()
+    for n in nodes:
+        result[n.name] = row2dict(n)
+    close_session(db)
+    return json.dumps(result)
+
+
+# Get the list of the nodes with their properties
+@user_v1.route("/node-prop", methods=["POST"])
 def list_node_prop():
     db = open_session()
     # Get the nodes
@@ -54,7 +70,6 @@ def list_node_prop():
         result[p.name][p.prop_name] = p.prop_value
     close_session(db)
     return json.dumps(result)
-
 
 
 @user_v1.route("/my-node", methods=["POST"])
