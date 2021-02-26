@@ -57,17 +57,17 @@ def list_node():
 
 # Get the list of the nodes with their properties
 @user_v1.route("/node-prop", methods=["POST"])
+@auth
 def list_node_prop():
     db = open_session()
     # Get the nodes
     result = {}
-    nodes = db.query(Node).all()
-    for n in nodes:
+    for n in db.query(Node).all():
         result[n.name] = row2dict(n)
     # Get the node properties
-    props = db.query(NodeProperty).all()
-    for p in props:
-        result[p.name][p.prop_name] = p.prop_value
+    for p in db.query(NodeProperty).all():
+        if p.name in result:
+            result[p.name][p.prop_name] = p.prop_value
     close_session(db)
     return json.dumps(result)
 
