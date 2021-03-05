@@ -2,11 +2,11 @@
     "auth_token": [ "12345678912345678912" ],
     "port_number": 8080,
     "action_driver": "fake",
-    "db_url": "sqlite:///test.db",
+    "db_url": "sqlite:///test-worker.db",
     "comments": "Do not forget the ending '/' at the end of the env_path",
     "env_path": "/root/usb_envs/",
     "fake_prop": [
-        "prop1", "prop2"
+        "fakeP1", "fakeP2"
     ],
     "raspberry_prop": [
         "port_number", "switch", "model", "serial"
@@ -21,24 +21,24 @@
         "name", "type", "desc", "img_name", "img_size", "sector_start", "ssh_user", "web"
     ],
     "configure_prop": {
+        "fake": {
+            "prop1": { "values": [ "value1", "value2", "value3" ], "mandatory": true },
+            "prop2": { "values": [], "mandatory": true },
+            "option": { "values": [], "mandatory": false }
+        },
         "raspberry": {
-            "environment": { "values": [], "mandatory": true },
-            "update_os": { "values": [ "yes", "no" ], "mandatory": true },
-            "part_size": { "values": [ "1gb", "whole" ], "mandatory": true },
-            "name": { "values": [], "mandatory": true },
+            "update_os": { "values": [ "no", "yes" ], "mandatory": true },
+            "part_size": { "values": [ "whole", "1gb"], "mandatory": true },
             "os_password": { "values": [], "mandatory": false },
-            "duration": { "values": [], "mandatory": true },
             "ssh_key_1": { "values": [], "mandatory": false },
             "ssh_key_2": { "values": [], "mandatory": false }
         },
         "sensor": {
-            "os": { "values": [], "mandatory": true },
-            "duration": { "values": [], "mandatory": true }
+            "os": { "values": [], "mandatory": true }
         },
         "server": {
             "site": { "values": [], "mandatory": true }, 
-            "os": { "values": [], "mandatory": true },
-            "duration": { "values": [], "mandatory": true }
+            "os": { "values": [], "mandatory": true }
         }
     }
 }

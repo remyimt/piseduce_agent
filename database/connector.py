@@ -8,10 +8,6 @@ def open_session():
     return SessionLocal()
 
 
-def row2dict(alchemyResult):
-    return { c.key: getattr(alchemyResult, c.key) for c in inspect(alchemyResult).mapper.column_attrs }
-
-
 def row2props(alchemyResults):
     props = {}
     for ar in alchemyResults:

@@ -137,5 +137,3 @@ def delete(el_type):
         return { "delete": len(existing) }
     else:
         return {"missing": no_data }
-
-

@@ -1,21 +1,25 @@
 from api.auth import auth
-from database.connector import open_session, close_session, row2dict
+from database.connector import open_session, close_session, row2props
 from database.tables import ActionProperty, Environment, Node, NodeProperty, Switch
 from datetime import datetime
 from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, load_config
-from sqlalchemy import or_
-import flask, json
+from sqlalchemy import inspect, and_, or_
+import flask, json, logging
 
 
 user_v1 = Blueprint("user_v1", __name__)
 
 
-@user_v1.route("/switch", methods=["POST"])
+def row2dict(alchemyResult):
+    return { c.key: getattr(alchemyResult, c.key) for c in inspect(alchemyResult).mapper.column_attrs }
+
+
+@user_v1.route("/switch/list", methods=["POST"])
 @auth
 def list_switch():
     db = open_session()
-    # Get the nodes
+    # Get the switches
     result = {}
     switches = db.query(Switch).all()
     for s in switches:
@@ -26,11 +30,11 @@ def list_switch():
     return json.dumps(result)
 
 
-@user_v1.route("/environment", methods=["POST"])
+@user_v1.route("/environment/list", methods=["POST"])
 @auth
 def list_environment():
     db = open_session()
-    # Get the nodes
+    # Get the environments
     result = {}
     envs = db.query(Environment).all()
     for e in envs:
@@ -42,23 +46,59 @@ def list_environment():
 
 
 # Get the list of the nodes
-@user_v1.route("/node", methods=["POST"])
+@user_v1.route("/node/list", methods=["POST"])
 @auth
-def list_node():
+def node_list():
     db = open_session()
-    # Get the nodes
     result = {}
-    nodes = db.query(Node).all()
-    for n in nodes:
+    if "properties" in flask.request.json and len(flask.request.json["properties"]) > 0:
+        # Get the nodes with properties that match the request
+        props = flask.request.json["properties"]
+        if "name" in props:
+            node = db.query(Node).filter(Node.name == props["name"]).first()
+            if node is not None:
+                result[node.name] = props
+        else:
+            # Build the AND filters
+            ands = None
+            for prop, value in props.items():
+                if ands is None:
+                    ands = and_(NodeProperty.prop_name == prop, NodeProperty.prop_value == value)
+                else:
+                    ands = ands | and_(NodeProperty.prop_name == prop, NodeProperty.prop_value == value)
+            # Get the nodes with the right properties
+            for node_prop in db.query(NodeProperty).filter(ands).all():
+                if node_prop.name not in result:
+                    result[node_prop.name] = {}
+                result[node_prop.name][node_prop.prop_name] = node_prop.prop_value
+    else:
+        # Get all nodes
+        nodes = db.query(Node).all()
+        for n in nodes:
+            result[n.name] = row2dict(n)
+    close_session(db)
+    return json.dumps(result)
+
+
+# Get the list of the nodes
+@user_v1.route("/node/status", methods=["POST"])
+@auth
+def node_status():
+    result = {}
+    db = open_session()
+    query = db.query(Node)
+    if "nodes" in flask.request.json:
+        query = query.filter(Node.name.in_(flask.request.json["nodes"]))
+    for n in query.all():
         result[n.name] = row2dict(n)
     close_session(db)
     return json.dumps(result)
 
 
 # Get the list of the nodes with their properties
-@user_v1.route("/node-prop", methods=["POST"])
+@user_v1.route("/node/prop", methods=["POST"])
 @auth
-def list_node_prop():
+def node_prop():
     db = open_session()
     # Get the nodes
     result = {}
@@ -72,7 +112,7 @@ def list_node_prop():
     return json.dumps(result)
 
 
-@user_v1.route("/my-node", methods=["POST"])
+@user_v1.route("/node/mine", methods=["POST"])
 @auth
 def my_node():
     if "user" not in flask.request.json or "@" not in flask.request.json["user"]:
@@ -84,7 +124,7 @@ def my_node():
             ).filter(Node.owner == flask.request.json["user"]
             ).all()
     for n in nodes:
-        result[n.name] = n.status
+        result[n.name] = row2dict(n)
     close_session(db)
     return json.dumps(result)
 
@@ -112,6 +152,7 @@ def reserve():
         ).all()
     for n in nodes:
         n.status = "configuring"
+        logging.info("[%s] change status to 'configuring'" % n.name)
         n.owner = user
         n.start_date = datetime.now().strftime(DATE_FORMAT)
         result[n.name] = row2dict(n)
@@ -129,14 +170,21 @@ def configure():
     if "user" not in flask.request.json or "@" not in flask.request.json["user"]:
         return json.dumps({ "parameters": "user: 'email@is.fr'" })
     result = {}
-    conf_prop = load_config()["configure_prop"]
+    # Common properties to every kind of nodes
+    conf_prop = {
+        "node_bin": { "values": [], "mandatory": True },
+        "duration": { "values": [], "mandatory": True }
+    }
+    # Get the specific properties according to the node type
     db = open_session()
     nodes = db.query(Node
             ).filter(Node.owner == flask.request.json["user"]
             ).filter(Node.status == "configuring"
             ).all()
     for n in nodes:
-        result[n.name] = conf_prop[n.type]
+        if len(conf_prop) == 2:
+            conf_prop.update(load_config()["configure_prop"][n.type])
+        result[n.name] = conf_prop
     close_session(db)
     return json.dumps(result)
 
@@ -146,7 +194,7 @@ def configure():
 def deploy():
     # Check the parameters
     error_msg = { "parameters": 
-            "user: 'email@is.fr', 'nodes': {'node-3': { 'name': 'my_deployment', 'duration': '4' }}" }
+            "user: 'email@is.fr', 'nodes': {'node-3': { 'node_bin': 'my_bin', 'duration': '4', 'environment': 'my-env' }}" }
     if "user" not in flask.request.json or "@" not in flask.request.json["user"] or \
         "nodes" not in flask.request.json:
         return json.dumps(error_msg)
@@ -191,6 +239,9 @@ def deploy():
                     act_prop.prop_value = node_prop[n.name][prop]
                     db.add(act_prop)
                 n.status = "ready"
+                n.bin = node_prop[n.name]["node_bin"]
+                n.duration = int(node_prop[n.name]["duration"])
+                logging.info("[%s] change status to 'ready'" % n.name)
                 result[n.name]["status"] = n.status
     close_session(db)
     return json.dumps(result)
@@ -219,6 +270,7 @@ def destroy():
             ).all()
     for n in nodes:
         n.status = "available"
+        logging.info("[%s] change status to 'available'" % n.name)
         n.owner = None
         n.start_date = None
         result[n.name] = row2dict(n)

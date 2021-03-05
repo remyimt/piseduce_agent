@@ -8,9 +8,11 @@ class Node(Base):
     name = Column(Text, primary_key=True)
     ip = Column(Text)
     owner = Column(Text)
+    bin = Column(Text)
     status = Column(Text)
     lost_state = Column(Text)
     start_date = Column(Text)
+    duration = Column(Integer)
 
 
     def __repr__(self):
@@ -44,7 +46,6 @@ class Environment(Base):
 class Action(Base):
     __tablename__ = 'action'
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(Text)
     node_name = Column(Text)
     node_ip = Column(Text)
     environment = Column(Text)
