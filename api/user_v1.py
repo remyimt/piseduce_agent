@@ -1,9 +1,9 @@
 from api.auth import auth
 from database.connector import open_session, close_session, row2props
-from database.tables import ActionProperty, Environment, Node, NodeProperty, Switch
+from database.tables import Action, ActionProperty, Environment, Node, NodeProperty, Switch
 from datetime import datetime
 from flask import Blueprint
-from lib.config_loader import DATE_FORMAT, load_config
+from lib.config_loader import DATE_FORMAT, get_config
 from sqlalchemy import inspect, and_, or_
 import flask, json, logging
 
@@ -73,7 +73,7 @@ def node_list():
                 result[node_prop.name][node_prop.prop_name] = node_prop.prop_value
     else:
         # Get all nodes
-        nodes = db.query(Node).all()
+        nodes = db.query(Node).filter(Node.type == get_config()["node_type"]).all()
         for n in nodes:
             result[n.name] = row2dict(n)
     close_session(db)
@@ -86,11 +86,22 @@ def node_list():
 def node_status():
     result = {}
     db = open_session()
-    query = db.query(Node)
+    nodes = []
     if "nodes" in flask.request.json:
-        query = query.filter(Node.name.in_(flask.request.json["nodes"]))
-    for n in query.all():
+        nodes = db.query(Node).filter(Node.name.in_(flask.request.json["nodes"])).all()
+    elif "user" in flask.request.json:
+        nodes = db.query(Node
+            ).filter(Node.type == get_config()["node_type"]
+            ).filter(Node.owner == flask.request.json["user"]
+            ).all()
+    for n in nodes:
         result[n.name] = row2dict(n)
+        if n.status == "in_progress":
+            action = db.query(Action.state).filter(Action.node_name == n.name).first()
+            if action is None or len(action.state) == 0:
+                result[n.name]["status"] = "in_progress"
+            else:
+                result[n.name]["status"] = action.state.replace("_post", "").replace("_exec", "")
     close_session(db)
     return json.dumps(result)
 
@@ -102,7 +113,7 @@ def node_prop():
     db = open_session()
     # Get the nodes
     result = {}
-    for n in db.query(Node).all():
+    for n in db.query(Node).filter(Node.type == get_config()["node_type"]).all():
         result[n.name] = row2dict(n)
     # Get the node properties
     for p in db.query(NodeProperty).all():
@@ -119,12 +130,24 @@ def my_node():
         return json.dumps({ "parameters": "user: 'email@is.fr'" })
     db = open_session()
     # Get my nodes
+    node_names = []
     result = {}
     nodes = db.query(Node
+            ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
             ).all()
     for n in nodes:
         result[n.name] = row2dict(n)
+        node_names.append(n.name)
+    props = db.query(NodeProperty).filter(NodeProperty.name.in_(result.keys())).all();
+    for p in props:
+        result[p.name][p.prop_name] = p.prop_value
+    envs = db.query(ActionProperty
+        ).filter(ActionProperty.node_name.in_(result.keys())
+        ).filter(ActionProperty.prop_name == "environment"
+        ).all();
+    for e in envs:
+        result[e.node_name][e.prop_name] = e.prop_value
     close_session(db)
     return json.dumps(result)
 
@@ -178,12 +201,13 @@ def configure():
     # Get the specific properties according to the node type
     db = open_session()
     nodes = db.query(Node
+            ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
             ).filter(Node.status == "configuring"
             ).all()
     for n in nodes:
         if len(conf_prop) == 2:
-            conf_prop.update(load_config()["configure_prop"][n.type])
+            conf_prop.update(get_config()["configure_prop"][n.type])
         result[n.name] = conf_prop
     close_session(db)
     return json.dumps(result)
@@ -207,7 +231,7 @@ def deploy():
     else:
         return json.dumps(error_msg)
     # Get the list of properties for the configuration
-    conf_prop = load_config()["configure_prop"]
+    conf_prop = get_config()["configure_prop"]
     # Get the node with the 'configuring' status
     result = {}
     db = open_session()
@@ -217,6 +241,12 @@ def deploy():
             ).all()
     for n in nodes:
         if n.name in node_prop:
+            duration = int(node_prop[n.name].pop("duration"))
+            # Remove special characters from value
+            safe_value = node_prop[n.name].pop("node_bin").translate({ord(c): "" for c in "\"!@#$%^&*()[]{};:,./<>?\|`~=+"})
+            # Remove spaces from value
+            safe_value = safe_value.replace(" ", "_")
+            node_bin = safe_value
             result[n.name] = {}
             # Check required properties
             required = [ prop for prop in conf_prop[n.type] if conf_prop[n.type][prop]["mandatory"] ]
@@ -233,14 +263,19 @@ def deploy():
                     db.delete(to_del)
                 # Write the configuration to the database
                 for prop in node_prop[n.name]:
-                    act_prop = ActionProperty()
-                    act_prop.node_name = n.name
-                    act_prop.prop_name = prop
-                    act_prop.prop_value = node_prop[n.name][prop]
-                    db.add(act_prop)
+                    if len(node_prop[n.name][prop]) > 0:
+                        act_prop = ActionProperty()
+                        act_prop.node_name = n.name
+                        act_prop.prop_name = prop
+                        # Remove special characters from value
+                        safe_value = node_prop[n.name][prop].translate({ord(c): "" for c in "\"!@#$%^&*()[]{};:,./<>?\|`~=+"})
+                        # Remove spaces from value
+                        safe_value = safe_value.replace(" ", "_")
+                        act_prop.prop_value = safe_value
+                        db.add(act_prop)
                 n.status = "ready"
-                n.bin = node_prop[n.name]["node_bin"]
-                n.duration = int(node_prop[n.name]["duration"])
+                n.bin = node_bin
+                n.duration = duration
                 logging.info("[%s] change status to 'ready'" % n.name)
                 result[n.name]["status"] = n.status
     close_session(db)
@@ -265,15 +300,22 @@ def destroy():
     db = open_session()
     nodes = db.query(Node
             ).filter(Node.name.in_(wanted)
-            ).filter(Node.status == "used"
             ).filter(Node.owner == user
             ).all()
     for n in nodes:
         n.status = "available"
         logging.info("[%s] change status to 'available'" % n.name)
+        n.bin = None
         n.owner = None
+        n.duration = None
         n.start_date = None
-        result[n.name] = row2dict(n)
+        actions = db.query(ActionProperty).filter(ActionProperty.node_name == n.name).all()
+        for action in actions:
+            db.delete(action)
+        actions = db.query(Action).filter(ActionProperty.node_name == n.name).all()
+        for action in actions:
+            db.delete(action)
+        result[n.name] = "success"
     close_session(db)
     # Build the result
     for n in wanted:

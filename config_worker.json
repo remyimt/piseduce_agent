@@ -1,7 +1,7 @@
 {
     "auth_token": [ "12345678912345678912" ],
-    "port_number": 8080,
-    "action_driver": "fake",
+    "port_number": 8090,
+    "node_type": "raspberry",
     "db_url": "sqlite:///test-worker.db",
     "comments": "Do not forget the ending '/' at the end of the env_path",
     "env_path": "/root/usb_envs/",

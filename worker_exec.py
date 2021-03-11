@@ -1,3 +1,12 @@
+# Load the configuration file
+import sys
+from lib.config_loader import load_config, get_config
+if len(sys.argv) != 2:
+    print("The configuration file is required in parameter.")
+    print("For example, 'python3 %s config.json'" % sys.argv[0])
+    sys.exit(2)
+load_config(sys.argv[1])
+
 from database.connector import open_session, close_session
 from database.tables import Action, ActionProperty, Node, NodeProperty
 from datetime import datetime
@@ -8,11 +17,11 @@ import logging, os, subprocess, sys, time
 
 
 # Import the action driver from config_worker.json
-action_driver = load_config()["action_driver"]
+node_type = get_config()["node_type"]
 # Import the action executor module
-exec_action_mod = import_module("%s.action_exec" % action_driver)
+exec_action_mod = import_module("%s.action_exec" % node_type)
 # Import the PROCESS and STATE_DESC variables
-py_module = import_module("%s.states" % action_driver)
+py_module = import_module("%s.states" % node_type)
 PROCESS = getattr(py_module, "PROCESS")
 STATE_DESC = getattr(py_module, "STATE_DESC")
 
@@ -48,18 +57,15 @@ def next_state_move(db_action):
 
 
 def new_action(db_node, db):
-    act_prop = db.query(ActionProperty
-        ).filter(ActionProperty.node_name == node.name
-        ).filter(or_(ActionProperty.prop_name == "name", ActionProperty.prop_name == "environment")
-        ).all()
     act = Action()
-    for prop in act_prop:
-        if prop.prop_name == "name":
-            act.name = prop.prop_value
-            act.node_name = node.name
-            act.node_ip = node.ip
-        if prop.prop_name == "environment":
-            act.environment = prop.prop_value
+    act_prop = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == db_node.name
+        ).filter(ActionProperty.prop_name == "environment"
+        ).first()
+    if act_prop is not None:
+        act.environment = act_prop.prop_value
+        act.node_name = db_node.name
+        act.node_ip = db_node.ip
     return act
 
 
@@ -94,16 +100,20 @@ def load_lost_state(db_node, db):
         if len(process_info) == 2:
             # Create a new action to continue the process
             act = new_action(db_node, db)
-            act.process = process_info[0]
-            idx = int(process_info[1])
-            if idx == 0:
-                act.state_idx = None
+            if len(act.node_name) > 0 and len(act.environment) > 0:
+                act.process = process_info[0]
+                idx = int(process_info[1])
+                if idx == 0:
+                    act.state_idx = None
+                else:
+                    act.state_idx = idx - 1
+                db.add(act)
+                next_state_move(act)
+                db_node.status = "in_progress"
+                db_node.lost_state = None
             else:
-                act.state_idx = idx - 1
-            db.add(act)
-            next_state_move(act)
-            db_node.status = "in_progress"
-            db_node.lost_state = None
+                logging.error("[%s] wrong configuration for the new action" % db_node.name)
+
         else:
             logging.error("[%s] can not find the process for the '%s' state" % (
                 db_node.name, db_node.lost_state))
@@ -128,12 +138,18 @@ if __name__ == "__main__":
     for info in pimaster_info:
         db.delete(info)
     # Register the information about the pimaster (me)
-    cmd = "whoami"
-    process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    my_user = process.stdout.decode("utf-8").strip()
-    cmd = "hostname -I"
-    process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    my_ip = process.stdout.decode("utf-8").strip()
+    if "user" in get_config():
+        my_user = get_config()["user"]
+    else:
+        cmd = "whoami"
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        my_user = process.stdout.decode("utf-8").strip()
+    if "ip" in get_config():
+        my_ip = get_config()["ip"]
+    else:
+        cmd = "hostname -I"
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        my_ip = process.stdout.decode("utf-8").strip()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
         user_record = NodeProperty()
         user_record.name = "pimaster"
@@ -150,7 +166,10 @@ if __name__ == "__main__":
         logging.error("can not get the IP or the user of the pimaster: ip=%s, user=%s" % (my_ip, my_user))
         sys.exit(13)
     # Try to configure the lost nodes
-    lost_nodes = db.query(Node).filter(Node.status == "lost").all()
+    lost_nodes = db.query(Node
+        ).filter(Node.type == get_config()["node_type"]
+        ).filter(Node.status == "lost"
+        ).all()
     for node in lost_nodes:
         logging.info("[%s] lost node rescue" % node.name)
         load_lost_state(node, db)
@@ -178,7 +197,10 @@ if __name__ == "__main__":
                 # Delete the action
                 db.delete(action)
             # Start actions for the recently configured nodes
-            pending_nodes = db.query(Node).filter(Node.status == "ready").all()
+            pending_nodes = db.query(Node
+                ).filter(Node.type == get_config()["node_type"]
+                ).filter(Node.status == "ready"
+                ).all()
             for node in pending_nodes:
                 logging.info("[%s] starts the deploy process" % node.name)
                 act = new_action(node, db)

@@ -2,7 +2,7 @@ from database.connector import row2props
 from database.tables import ActionProperty, Node, NodeProperty, Environment
 from datetime import datetime
 from glob import glob
-from lib.config_loader import DATE_FORMAT, load_config
+from lib.config_loader import DATE_FORMAT, get_config
 from lib.switch_snmp import turn_on_port, turn_off_port
 from paramiko.ssh_exception import BadHostKeyException, AuthenticationException, SSHException
 from raspberry.states import SSH_IDX
@@ -92,7 +92,7 @@ def ssh_test_post(action, db):
 
 
 def env_copy_exec(action, db):
-    env_path = load_config()["env_path"]
+    env_path = get_config()["env_path"]
     node_ip = db.query(NodeProperty
             ).filter(NodeProperty.name  == action.node_name
             ).filter(NodeProperty.prop_name == "ip").first().prop_value

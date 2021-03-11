@@ -1,7 +1,7 @@
 from api.auth import auth
 from database.connector import open_session, close_session
 from database.tables import Environment, Node, NodeProperty, Switch 
-from lib.config_loader import load_config
+from lib.config_loader import get_config
 import flask, json
 
 
@@ -12,7 +12,7 @@ admin_v1 = flask.Blueprint("admin_v1", __name__)
 @auth
 def add_switch():
     switch_data = flask.request.json
-    switch_props = load_config()["switch_prop"]
+    switch_props = get_config()["switch_prop"]
     # Check if all properties belong to the POST data
     no_data = [key_data for key_data in switch_props if key_data not in switch_data.keys()]
     if len(no_data) == 0:
@@ -37,9 +37,9 @@ def add_switch():
 @auth
 def add_node():
     node_data = flask.request.json
-    node_props = load_config()["node_prop"].copy()
-    worker_type = load_config()["action_driver"]
-    node_props += load_config()[worker_type + "_prop"]
+    node_props = get_config()["node_prop"].copy()
+    worker_type = get_config()["node_type"]
+    node_props += get_config()[worker_type + "_prop"]
     # Check if all properties belong to the POST data
     no_data = [key_data for key_data in node_props if key_data not in node_data.keys()]
     if len(no_data) == 0:
@@ -74,7 +74,7 @@ def add_node():
 @auth
 def add_environment():
     env_data = flask.request.json
-    env_props = load_config()["env_prop"]
+    env_props = get_config()["env_prop"]
     # Check if all properties belong to the POST data
     no_data = [key_data for key_data in env_props if key_data not in env_data.keys()]
     if len(no_data) == 0:

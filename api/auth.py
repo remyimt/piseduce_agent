@@ -1,4 +1,4 @@
-from lib.config_loader import load_config
+from lib.config_loader import get_config
 import flask, functools
 
 def auth(f):
@@ -8,7 +8,7 @@ def auth(f):
             flask.abort(503)
         else:
             token = flask.request.json.get("token")
-            if len(token) != 10 and not token in load_config()["auth_token"]:
+            if len(token) != 10 and not token in get_config()["auth_token"]:
                 flask.abort(503)
         return f(*args, **kwargs)
     return decorated_function
