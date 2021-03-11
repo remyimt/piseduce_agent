@@ -1,3 +1,13 @@
+# Load the configuration file
+import sys
+from lib.config_loader import load_config, get_config
+
+if len(sys.argv) != 2:
+    print("The configuration file is required in parameter.")
+    print("For example, 'python3 %s config.json'" % sys.argv[0])
+    sys.exit(2)
+load_config(sys.argv[1])
+
 from database.base import DB_URL
 from database.connector import create_tables
 import logging
