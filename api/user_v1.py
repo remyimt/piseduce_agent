@@ -258,7 +258,7 @@ def deploy():
                         result[n.name]["missing"].append(prop)
             if len(result[n.name]) == 0:
                 # Delete the existing configuration for this node
-                existing = db.query(ActionProperty).filter_by(node_name = n.name).all()
+                existing = db.query(ActionProperty).filter(ActionProperty.node_name == n.name).all()
                 for to_del in existing:
                     db.delete(to_del)
                 # Write the configuration to the database
