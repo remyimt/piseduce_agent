@@ -76,6 +76,10 @@ def node_list():
         nodes = db.query(Node).filter(Node.type == get_config()["node_type"]).all()
         for n in nodes:
             result[n.name] = row2dict(n)
+        # Remove the useless type property
+        # TODO Do not write the type of the elements in the DB
+        for n in nodes:
+            del result[n.name]["type"]
     close_session(db)
     return json.dumps(result)
 
