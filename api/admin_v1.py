@@ -155,11 +155,11 @@ def init_detect():
     # Get existing static IP from the dnsmasq configuration
     existing_ips = []
     existing_macs = []
-    cmd = "grep dhcp-host /etc/dnsmasq.conf"
+    cmd = "grep ^dhcp-host /etc/dnsmasq.conf"
     process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         universal_newlines=True)
     for line in process.stdout.split('\n'):
-        if "," in line:
+        if "," in line and not line.startswith("#"):
             existing_ips.append(line.split(",")[2])
             existing_macs.append(line.split(",")[0][-17:])
             result["macs"].append(line.split(",")[0][-17:])
@@ -209,8 +209,9 @@ def dhcp_conf(switch_name):
             logging.info("Last DHCP request at %s" % log_date)
             if (now - log_date).seconds < 10:
                 mac = line.split(" ")[7]
-                if len(mac) == 17 and (mac.startswith("dc:a6:32") or mac.startswith("b8:27:eb")) \
-                    and mac not in known_macs:
+                if len(mac) == 17 and (mac.startswith("dc:a6:32") or mac.startswith("b8:27:eb")):
+                    if mac in known_macs:
+                        logging.error("[node-%s] MAC '%s' already exists in the DHCP configuration" % (node_port, mac))
                     node_mac = mac
     if len(node_mac) > 0:
         logging.info("[node-%s] new node with the MAC '%s'" % (node_port, node_mac))
