@@ -7,7 +7,7 @@ from lib.config_loader import get_config
 from lib.switch_snmp import get_poe_status, switch_test, turn_on_port, turn_off_port
 from paramiko.ssh_exception import BadHostKeyException, AuthenticationException, SSHException
 from sqlalchemy import distinct
-import flask, json, logging, os, paramiko, shutil, subprocess, time
+import flask, json, logging, os, paramiko, shutil, socket, subprocess, time
 
 
 admin_v1 = flask.Blueprint("admin_v1", __name__)
@@ -34,9 +34,14 @@ def add_switch():
         for data in switch_data:
             checks[data] = { "value": switch_data[data] }
         db = open_session()
-        existing = db.query(Switch).filter_by(name = switch_data["name"]).all()
+        existing = db.query(Switch).filter(Switch.name == switch_data["name"]).all()
         for to_del in existing:
             db.delete(to_del)
+        # Compute the last digit of the IP address of the node on the first port of the new switch
+        all_switches = db.query(Switch).filter(Switch.prop_name == "port_nb").all()
+        last_digit = 1
+        for sw in all_switches:
+            last_digit += int(sw.prop_value)
         close_session(db)
         # Check the IP
         ip_check = False
@@ -59,6 +64,7 @@ def add_switch():
             db.add(new_switch_prop(switch_data["name"], "ip", switch_data["ip"]))
             db.add(new_switch_prop(switch_data["name"], "community", switch_data["community"]))
             db.add(new_switch_prop(switch_data["name"], "port_nb", switch_info["port_nb"]))
+            db.add(new_switch_prop(switch_data["name"], "first_ip", last_digit))
             db.add(new_switch_prop(switch_data["name"], "master_port", switch_data["master_port"]))
             db.add(new_switch_prop(switch_data["name"], "oid", switch_info["oid"]))
             db.add(new_switch_prop(switch_data["name"], "oid_offset", switch_info["offset"]))
@@ -136,10 +142,10 @@ def turn_off(switch_name):
     return json.dumps(result)
 
 
-@admin_v1.route("/switch/init_detect", methods=["POST"])
+@admin_v1.route("/switch/init_detect/<string:switch_name>", methods=["POST"])
 @auth
-def init_detect():
-    result = { "errors": [], "network": "", "macs": [] }
+def init_detect(switch_name):
+    result = { "errors": [], "network": "", "ip_offset": 0, "macs": [] }
     if "ports" not in flask.request.json:
         result["errors"].append("Required parameters: 'ports'")
         return json.dumps(result)
@@ -166,8 +172,13 @@ def init_detect():
     logging.info("existing ips: %s" % existing_ips)
     logging.info("existing macs: %s" % existing_macs)
     # Check the node IP is available
+    db = open_session()
+    myswitch = db.query(Switch).filter(Switch.name == switch_name).filter(Switch.prop_name == "first_ip").first()
+    ip_offset = int(myswitch.prop_value) - 1
+    close_session(db)
+    result["ip_offset"] = ip_offset
     for port in flask.request.json["ports"]:
-        node_ip = "%s.%s" % (result["network"], port)
+        node_ip = "%s.%d" % (result["network"], (ip_offset + int(port)))
         if  node_ip in existing_ips:
             result["errors"].append("%s already exists in the DHCP configuration!" % node_ip)
             return json.dumps(result)
@@ -187,12 +198,14 @@ def init_detect():
 @auth
 def dhcp_conf(switch_name):
     result = { "errors": [], "node_ip": "" }
-    if "port" not in flask.request.json or "macs" not in flask.request.json or "network" not in flask.request.json:
-        result["errors"].append("Required parameters: 'port', 'macs' and 'network'")
+    if "port" not in flask.request.json or "macs" not in flask.request.json or \
+            "network" not in flask.request.json or "ip_offset" not in flask.request.json:
+        result["errors"].append("Required parameters: 'port', 'macs', 'network' and 'ip_offset'")
         return json.dumps(result)
-    node_port = flask.request.json["port"]
+    node_port = int(flask.request.json["port"])
     known_macs = flask.request.json["macs"]
-    network_ip = flask.request.json["network"]
+    last_digit = int(flask.request.json["ip_offset"]) + node_port
+    node_ip = "%s.%d" % (flask.request.json["network"], last_digit)
     # Detect MAC address by sniffing DHCP requests
     logging.info('Reading system logs to get failed DHCP requests')
     # Reading system logs to retrieve failed DHCP requests
@@ -211,15 +224,16 @@ def dhcp_conf(switch_name):
                 mac = line.split(" ")[7]
                 if len(mac) == 17 and (mac.startswith("dc:a6:32") or mac.startswith("b8:27:eb")):
                     if mac in known_macs:
-                        logging.error("[node-%s] MAC '%s' already exists in the DHCP configuration" % (node_port, mac))
+                        logging.error("[node-%s] MAC '%s' already exists in the DHCP configuration" % (last_digit, mac))
+                        result["errors"].append("%s already exists in the DHCP configuration!" % mac)
+                        return json.dumps(result)
                     node_mac = mac
     if len(node_mac) > 0:
-        logging.info("[node-%s] new node with the MAC '%s'" % (node_port, node_mac))
-        node_ip = "%s.%s" % (network_ip, node_port)
+        logging.info("[node-%s] new node with the MAC '%s'" % (last_digit, node_mac))
         # Configure the node IP according to the MAC address
-        cmd = "echo 'dhcp-host=%s,node-%s,%s' >> /etc/dnsmasq.conf" % (node_mac, node_port, node_ip)
+        cmd = "echo 'dhcp-host=%s,node-%d,%s' >> /etc/dnsmasq.conf" % (node_mac, last_digit, node_ip)
         process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        logging.info("[node-%s] MAC: '%s', IP: '%s'" % (node_port, node_mac, node_ip))
+        logging.info("[node-%s] MAC: '%s', IP: '%s'" % (last_digit, node_mac, node_ip))
         # Restart dnsmasq
         cmd = "service dnsmasq restart"
         process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -230,8 +244,7 @@ def dhcp_conf(switch_name):
         # Fill the result
         result["node_ip"] = node_ip
     else:
-        result["errors"].append("[node-%s] No detected MAC" % node_port)
-        logging.error("[node-%s] no detected MAC" % node_port)
+        logging.warning("[node-%s] no detected MAC" % node_port)
     return json.dumps(result)
 
 
@@ -259,13 +272,13 @@ def dhcp_conf_del(switch_name):
 @admin_v1.route("/switch/node_conf/<string:switch_name>", methods=["POST"])
 @auth
 def node_conf(switch_name):
-    result = { "errors": [] }
+    result = { "errors": [], "serial": "" }
     if "node_ip" not in flask.request.json or "port" not in flask.request.json:
         result["errors"].append("Required parameters: 'node_ip', 'port'")
         return json.dumps(result)
     node_ip = flask.request.json["node_ip"]
     node_port = flask.request.json["port"]
-    node_name = "%s-%s" % (switch_name, node_port)
+    node_name = "node-%s" % node_ip.split(".")[-1]
     node_model = ""
     node_serial = ""
     ssh = paramiko.SSHClient()
@@ -286,6 +299,7 @@ def node_conf(switch_name):
                     node_model = "unknown"
             if "Serial" in output:
                 node_serial = output.split()[-1][-8:]
+                result["serial"] = node_serial
         ssh.close()
         # End of the configuration, turn off the node
         turn_off_port(switch_name, node_port)
@@ -337,19 +351,23 @@ def node_conf(switch_name):
             db.add(prop_db)
             close_session(db)
     except (AuthenticationException, SSHException, socket.error):
-        result["errors"].append("[node-%s] can not connect via SSH to %s" % (node_port, node_ip))
         logging.warn("[node-%s] can not connect via SSH to %s" % (node_port, node_ip))
     return json.dumps(result)
 
 
-@admin_v1.route("/switch/clean_detect/<string:switch_name>", methods=["POST"])
+@admin_v1.route("/switch/clean_detect", methods=["POST"])
 @auth
-def clean_detect(switch_name):
+def clean_detect():
     result = { "errors": [] }
-    # Turn off the ports
-    if "ports" in flask.request.json:
-        logging.info("clean")
     # Delete the files in the tftpboot directory
+    tftp_files = glob('/tftpboot/rpiboot_uboot/*')
+    for f in tftp_files:
+        new_f = f.replace('/rpiboot_uboot','')
+        if os.path.isdir(new_f):
+            shutil.rmtree(new_f)
+        else:
+            if not 'bootcode.bin' in new_f:
+                os.remove(new_f)
     return json.dumps(result)
 
 
