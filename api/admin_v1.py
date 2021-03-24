@@ -291,10 +291,16 @@ def node_conf(switch_name):
             output = line.strip()
             if "Revision" in output:
                 rev = output.split()[-1]
-                if rev == "c03111":
-                    node_model = "RPI4B"
                 if rev == "a020d3":
-                    node_model = "RPI3Bplus"
+                    node_model = "RPI3B+1G"
+                if rev == "a03111":
+                    node_model = "RPI4B1G"
+                if rev in ["b03111", "b03112" , "b03114"]:
+                    node_model = "RPI4B2G"
+                if rev in ["c03111", "c03112" , "c03114"]:
+                    node_model = "RPI4B4G"
+                if rev == "d03114":
+                    node_model = "RPI4B8G"
                 if len(node_model) == 0:
                     node_model = "unknown"
             if "Serial" in output:
