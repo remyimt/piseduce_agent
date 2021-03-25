@@ -361,7 +361,7 @@ def system_conf_exec(action, db):
         act_prop.prop_value = os_password
         db.add(act_prop)
     else:
-        os_password = os_password.prop_value
+        os_password = pwd.prop_value
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())

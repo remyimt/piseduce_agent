@@ -57,7 +57,7 @@ class Action(Base):
 
 
     def __repr__(self):
-        return "action(%s, %s, %s, %s)" % (self.name, self.node_name, self.state, self.updated_at)
+        return "action(%s, %s, %s)" % (self.node_name, self.state, self.updated_at)
 
 
 class ActionProperty(Base):

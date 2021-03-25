@@ -28,7 +28,7 @@ PROCESS = {
         {
             'environments': [],
             'states': [
-                'turn_off', 'turn_on', 'coming_back', 'rebooted'
+                'turn_off', 'turn_on', 'rebooted'
             ]
         }
     ],

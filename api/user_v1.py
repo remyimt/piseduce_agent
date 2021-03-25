@@ -6,6 +6,7 @@ from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, get_config
 from importlib import import_module
 from sqlalchemy import inspect, and_, or_
+from worker_exec import new_action, init_action_process
 import flask, json, logging
 
 
@@ -333,6 +334,80 @@ def destroy():
         actions = db.query(Action).filter(ActionProperty.node_name == n.name).all()
         for action in actions:
             db.delete(action)
+        result[n.name] = "success"
+    close_session(db)
+    # Build the result
+    for n in wanted:
+        if n not in result:
+            result[n] = "failure"
+    return json.dumps(result)
+
+
+@user_v1.route("/hardreboot", methods=["POST"])
+@auth
+def hardreboot():
+    result = {}
+    # Check POST data
+    if "nodes" not in flask.request.json or \
+        "user" not in flask.request.json:
+        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
+    wanted = flask.request.json["nodes"]
+    user = flask.request.json["user"]
+    if len(user) == 0 or '@' not in  user:
+        for n in wanted:
+            result[n] = "no_email"
+        return json.dumps(result)
+    # Get information about the requested nodes
+    db = open_session()
+    nodes = db.query(Node
+            ).filter(Node.name.in_(wanted)
+            ).filter(Node.owner == user
+            ).all()
+    for n in nodes:
+        node_action = db.query(Action).filter(Action.node_name == n.name).first()
+        if node_action is None:
+            # The deployment is completed, add a new action
+            node_action = new_action(n, db)
+        # The deployment is completed, add a new action
+        init_action_process(node_action, "reboot")
+        db.add(node_action)
+        result[n.name] = "success"
+    close_session(db)
+    # Build the result
+    for n in wanted:
+        if n not in result:
+            result[n] = "failure"
+    return json.dumps(result)
+
+
+@user_v1.route("/deployagain", methods=["POST"])
+@auth
+def deployagain():
+    result = {}
+    # Check POST data
+    if "nodes" not in flask.request.json or \
+        "user" not in flask.request.json:
+        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
+    wanted = flask.request.json["nodes"]
+    user = flask.request.json["user"]
+    if len(user) == 0 or '@' not in  user:
+        for n in wanted:
+            result[n] = "no_email"
+        return json.dumps(result)
+    # Get information about the requested nodes
+    db = open_session()
+    nodes = db.query(Node
+            ).filter(Node.name.in_(wanted)
+            ).filter(Node.owner == user
+            ).all()
+    for n in nodes:
+        node_action = db.query(Action).filter(Action.node_name == n.name).first()
+        if node_action is None:
+            # The deployment is completed, add a new action
+            node_action = new_action(n, db)
+        # The deployment is completed, add a new action
+        init_action_process(node_action, "deploy")
+        db.add(node_action)
         result[n.name] = "success"
     close_session(db)
     # Build the result

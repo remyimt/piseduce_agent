@@ -66,6 +66,7 @@ def new_action(db_node, db):
         act.environment = act_prop.prop_value
         act.node_name = db_node.name
         act.node_ip = db_node.ip
+    db_node.status = "in_progress"
     return act
 
 
@@ -109,7 +110,6 @@ def load_lost_state(db_node, db):
                     act.state_idx = idx - 1
                 db.add(act)
                 next_state_move(act)
-                db_node.status = "in_progress"
                 db_node.lost_state = None
             else:
                 logging.error("[%s] wrong configuration for the new action" % db_node.name)
@@ -205,7 +205,6 @@ if __name__ == "__main__":
                 logging.info("[%s] starts the deploy process" % node.name)
                 act = new_action(node, db)
                 init_action_process(act, "deploy")
-                node.status = "in_progress"
                 db.add(act)
             # Process the ongoing actions
             pending_actions = db.query(Action).filter(~Action.state.in_(final_states)
