@@ -4,6 +4,7 @@ from database.tables import Action, ActionProperty, Environment, Node, NodePrope
 from datetime import datetime
 from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, get_config
+from importlib import import_module
 from sqlalchemy import inspect, and_, or_
 import flask, json, logging
 
@@ -88,7 +89,8 @@ def node_list():
 @user_v1.route("/node/status", methods=["POST"])
 @auth
 def node_status():
-    result = {}
+    result = { "nodes": {} }
+    # Get the status of the nodes
     db = open_session()
     nodes = []
     if "nodes" in flask.request.json:
@@ -99,13 +101,13 @@ def node_status():
             ).filter(Node.owner == flask.request.json["user"]
             ).all()
     for n in nodes:
-        result[n.name] = row2dict(n)
+        result["nodes"][n.name] = row2dict(n)
         if n.status == "in_progress":
             action = db.query(Action.state).filter(Action.node_name == n.name).first()
             if action is None or len(action.state) == 0:
-                result[n.name]["status"] = "in_progress"
+                result["nodes"][n.name]["status"] = "in_progress"
             else:
-                result[n.name]["status"] = action.state.replace("_post", "").replace("_exec", "")
+                result["nodes"][n.name]["status"] = action.state.replace("_post", "").replace("_exec", "")
     close_session(db)
     return json.dumps(result)
 
@@ -130,28 +132,34 @@ def node_prop():
 @user_v1.route("/node/mine", methods=["POST"])
 @auth
 def my_node():
+    result = {"states": [], "nodes": {}}
     if "user" not in flask.request.json or "@" not in flask.request.json["user"]:
         return json.dumps({ "parameters": "user: 'email@is.fr'" })
+    # Get the list of the states for the 'deploy' process
+    py_module = import_module("%s.states" % get_config()["node_type"])
+    PROCESS = getattr(py_module, "PROCESS")
+    for p in PROCESS["deploy"]:
+        if len(p["states"]) > len(result["states"]):
+            result["states"] = p["states"]
     db = open_session()
     # Get my nodes
     node_names = []
-    result = {}
     nodes = db.query(Node
             ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
             ).all()
     for n in nodes:
-        result[n.name] = row2dict(n)
+        result["nodes"][n.name] = row2dict(n)
         node_names.append(n.name)
-    props = db.query(NodeProperty).filter(NodeProperty.name.in_(result.keys())).all();
+    props = db.query(NodeProperty).filter(NodeProperty.name.in_(result["nodes"].keys())).all();
     for p in props:
-        result[p.name][p.prop_name] = p.prop_value
+        result["nodes"][p.name][p.prop_name] = p.prop_value
     envs = db.query(ActionProperty
-        ).filter(ActionProperty.node_name.in_(result.keys())
-        ).filter(ActionProperty.prop_name == "environment"
+        ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
+        ).filter(ActionProperty.prop_name.in_(["environment", "os_password"])
         ).all();
     for e in envs:
-        result[e.node_name][e.prop_name] = e.prop_value
+        result["nodes"][e.node_name][e.prop_name] = e.prop_value
     close_session(db)
     return json.dumps(result)
 
@@ -200,17 +208,23 @@ def configure():
     # Common properties to every kind of nodes
     conf_prop = {
         "node_bin": { "values": [], "mandatory": True },
+        "environment": { "values": [], "mandatory": True },
         "duration": { "values": [], "mandatory": True }
     }
-    # Get the specific properties according to the node type
+    # DB connection
     db = open_session()
+    # List the existing environments
+    envs = db.query(Environment).filter(Environment.prop_name == "web").all()
+    for env in envs:
+        conf_prop["environment"]["values"].append(env.name)
+    # Get the specific properties according to the node type
     nodes = db.query(Node
             ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
             ).filter(Node.status == "configuring"
             ).all()
     for n in nodes:
-        if len(conf_prop) == 2:
+        if len(conf_prop) == 3:
             conf_prop.update(get_config()["configure_prop"][n.type])
         result[n.name] = conf_prop
     close_session(db)
@@ -246,7 +260,7 @@ def deploy():
     for n in nodes:
         if n.name in node_prop:
             duration = int(node_prop[n.name].pop("duration"))
-            # Remove special characters from value
+            # Remove special characters from the node bin name
             safe_value = node_prop[n.name].pop("node_bin").translate({ord(c): "" for c in "\"!@#$%^&*()[]{};:,./<>?\|`~=+"})
             # Remove spaces from value
             safe_value = safe_value.replace(" ", "_")

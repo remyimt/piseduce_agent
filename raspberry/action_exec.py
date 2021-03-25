@@ -6,7 +6,13 @@ from lib.config_loader import DATE_FORMAT, get_config
 from lib.switch_snmp import turn_on_port, turn_off_port
 from paramiko.ssh_exception import BadHostKeyException, AuthenticationException, SSHException
 from raspberry.states import SSH_IDX
-import logging, os, paramiko, shutil, socket, subprocess, time
+import logging, os, paramiko, random, shutil, socket, string, subprocess, time
+
+def new_password(stringLength=8):
+    """Generate a random string of letters and digits """
+    lettersAndDigits = string.ascii_letters + string.digits
+    return ''.join(random.choice(lettersAndDigits) for i in range(stringLength))
+
 
 # Deploy environments
 def boot_conf_exec(action, db):
@@ -214,7 +220,7 @@ def create_partition_exec(action, db):
         ssh.connect(action.node_ip, username="root", timeout=1.0)
         moreMB = act_prop["part_size"]
         if moreMB == "whole":
-            logging.info("[%s] create a partition with the whole free space" % action.name)
+            logging.info("[%s] create a partition with the whole free space" % action.node_name)
             cmd = ("(echo n; echo p; echo 2; echo '%s'; echo ''; echo w) | fdisk -u /dev/mmcblk0" % sector_start)
         else:
             # Total size of the new partition in sectors (512B)
@@ -341,10 +347,21 @@ def wait_resizing_exec(action, db):
 
 
 def system_conf_exec(action, db):
-    os_password = db.query(ActionProperty
+    pwd = db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name == "os_password"
-        ).first().prop_value
+        ).first()
+    os_password = ""
+    if pwd is None:
+        # Generate the password
+        os_password = new_password()
+        act_prop = ActionProperty()
+        act_prop.node_name = action.node_name
+        act_prop.prop_name = "os_password"
+        act_prop.prop_value = os_password
+        db.add(act_prop)
+    else:
+        os_password = os_password.prop_value
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -445,15 +462,15 @@ def system_update_exec(action, db):
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name == "update_os"
         ).first().prop_value
-    ssh_user = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name == "ssh_user"
-        ).first().prop_value
-    if not int(update_os):
+    if update_os == "no":
         # Do not update the operating system
         logging.info("[%s] the OS update is disabled" % action.node_name)
         return True
     # Update the operating system
+    ssh_user = db.query(Environment
+        ).filter(Environment.name  == action.environment
+        ).filter(Environment.prop_name == "ssh_user"
+        ).first().prop_value
     if action.environment.startswith("raspbian") or action.environment.startswith("ubuntu"):
         try:
             ssh = paramiko.SSHClient()
@@ -486,14 +503,14 @@ def system_update_post(action, db):
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name == "update_os"
         ).first().prop_value
+    if update_os == "no":
+        # Do not update the operating system
+        return True
+    # Update the operating system
     ssh_user = db.query(Environment
         ).filter(Environment.name  == action.environment
         ).filter(Environment.prop_name == "ssh_user"
         ).first().prop_value
-    if not int(update_os):
-        # Do not update the operating system
-        return True
-    # Update the operating system
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -520,6 +537,9 @@ def boot_update_exec(action, db):
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name == "update_os"
         ).first().prop_value
+    if update_os == "no":
+        # The operating system is not updated => do not update the boot files
+        return True
     ssh_user = db.query(Environment
         ).filter(Environment.name  == action.environment
         ).filter(Environment.prop_name == "ssh_user"
@@ -528,9 +548,6 @@ def boot_update_exec(action, db):
         ).filter(NodeProperty.name  == action.node_name
         ).filter(NodeProperty.prop_name == "serial"
         ).first().prop_value
-    if not int(update_os):
-        # The operating system is not updated => do not update the boot files
-        return True
     # Copy boot files to the tftp directory
     tftpboot_node_folder = "/tftpboot/%s" % serial
     # Delete the existing tftp directory
