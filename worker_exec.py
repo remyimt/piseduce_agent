@@ -121,7 +121,7 @@ def load_lost_state(db_node, db):
 
 if __name__ == "__main__":
     # This file used by the SystemD service
-    STOP_FILE = "tasksstop"
+    STOP_FILE = "execstop"
     # Logging configuration
     logging.basicConfig(filename='info_exec.log', level=logging.INFO,
         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
