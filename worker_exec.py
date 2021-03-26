@@ -150,6 +150,11 @@ if __name__ == "__main__":
         cmd = "hostname -i"
         process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         my_ip = process.stdout.decode("utf-8").strip()
+        if len(my_ip) == 0 or len(my_ip.split(".")) != 4:
+            # Try another command
+            cmd = "hostname -I"
+            process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            my_ip = process.stdout.decode("utf-8").strip()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
         user_record = NodeProperty()
         user_record.name = "pimaster"
