@@ -258,7 +258,7 @@ def dhcp_conf_del(switch_name):
         return json.dumps(result)
     # Delete records in dnsmasq configuration using IP
     if len(flask_data["ip"]) > 0:
-        cmd = "sed -i '/%s/d' /etc/dnsmasq.conf" % flask_data["ip"]
+        cmd = "sed -i '/%s$/d' /etc/dnsmasq.conf" % flask_data["ip"]
         process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # Delete records in dnsmasq configuration using MAC
     if len(flask_data["mac"]) > 0:
