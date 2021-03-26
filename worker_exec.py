@@ -147,7 +147,7 @@ if __name__ == "__main__":
     if "ip" in get_config():
         my_ip = get_config()["ip"]
     else:
-        cmd = "hostname -I"
+        cmd = "hostname -i"
         process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         my_ip = process.stdout.decode("utf-8").strip()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
