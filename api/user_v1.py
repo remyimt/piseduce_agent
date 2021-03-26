@@ -287,7 +287,7 @@ def deploy():
                         act_prop.node_name = n.name
                         act_prop.prop_name = prop
                         # Remove special characters from value
-                        safe_value = node_prop[n.name][prop].translate({ord(c): "" for c in "\"!@#$%^&*()[]{};:,./<>?\|`~=+"})
+                        safe_value = node_prop[n.name][prop].translate({ord(c): "" for c in "\"!@#$%^&*()[]{};:,/<>?\|`~=+"})
                         # Remove spaces from value
                         safe_value = safe_value.replace(" ", "_")
                         act_prop.prop_value = safe_value
