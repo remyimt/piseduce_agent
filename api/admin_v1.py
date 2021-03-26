@@ -209,7 +209,7 @@ def dhcp_conf(switch_name):
     # Detect MAC address by sniffing DHCP requests
     logging.info('Reading system logs to get failed DHCP requests')
     # Reading system logs to retrieve failed DHCP requests
-    cmd = "grep DHCPDISCOVER /var/log/syslog | grep \"no address\" | tail -n 1"
+    cmd = "grep -a DHCPDISCOVER /var/log/syslog | grep \"no address\" | tail -n 1"
     process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             universal_newlines=True)
     node_mac = ""
