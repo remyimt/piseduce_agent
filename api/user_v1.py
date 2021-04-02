@@ -100,6 +100,7 @@ def node_status():
         nodes = db.query(Node
             ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
+            ).filter(Node.status != "configuring"
             ).all()
     for n in nodes:
         result["nodes"][n.name] = row2dict(n)
@@ -148,6 +149,7 @@ def my_node():
     nodes = db.query(Node
             ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
+            ).filter(Node.status != "configuring"
             ).all()
     for n in nodes:
         result["nodes"][n.name] = row2dict(n)
