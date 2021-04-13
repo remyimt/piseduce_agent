@@ -1,4 +1,5 @@
 from api.auth import auth
+from api.tool import safe_string
 from database.connector import open_session, close_session
 from database.tables import Environment, Node, NodeProperty, Switch 
 from datetime import datetime
@@ -19,6 +20,59 @@ def new_switch_prop(switch_name, prop_name, prop_value):
     new_prop.prop_name = prop_name
     new_prop.prop_value = prop_value
     return new_prop
+
+
+# Add DHCP clients to the dnsmasq configuration
+@admin_v1.route("/add/client", methods=["POST"])
+@auth
+def add_client():
+    # Received data
+    dhcp_data = flask.request.json
+    del dhcp_data["token"]
+    dhcp_props = get_config()["client_prop"]
+    # Check if all properties belong to the POST data
+    missing_data = dict([ (key_data, []) for key_data in dhcp_props if key_data not in dhcp_data.keys()])
+    if len(missing_data) == 0:
+        # Check the parameters of the DHCP client
+        checks = {}
+        for data in dhcp_data:
+            checks[data] = { "value": dhcp_data[data] }
+        # Get the network IP from the dnsmasq configuration
+        cmd = "grep listen-address /etc/dnsmasq.conf"
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            universal_newlines=True)
+        network_ip = process.stdout.split("=")[1]
+        network_ip = network_ip[:network_ip.rindex(".")]
+        # Get the existing IP addresses
+        existing_ips = []
+        cmd = "grep ^dhcp-host /etc/dnsmasq.conf"
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            universal_newlines=True)
+        for line in process.stdout.split('\n'):
+            if "," in line and not line.startswith("#"):
+                existing_ips.append(line.split(",")[2])
+        # Check the provided IP
+        ip_check = dhcp_data["ip"].startswith(network_ip) and dhcp_data["ip"] not in existing_ips
+        checks["ip"]["check"] = ip_check
+        # Check the value looks like a MAC address
+        mac_check = len(dhcp_data["mac_address"]) == 17 and len(dhcp_data["mac_address"].split(":")) == 6
+        checks["mac_address"]["check"] = mac_check
+        # Remove unwanted characters from the name
+        dhcp_data["name"] = safe_string(dhcp_data["name"])
+        if ip_check and mac_check:
+            # Add the DHCP client
+            cmd = "echo 'dhcp-host=%s,%s,%s' >> /etc/dnsmasq.conf" % (
+                    dhcp_data["mac_address"], dhcp_data["name"], dhcp_data["ip"])
+            process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            logging.info("[%s] MAC: '%s', IP: '%s'" % (dhcp_data["name"], dhcp_data["mac_address"], dhcp_data["ip"]))
+            # Restart dnsmasq
+            cmd = "service dnsmasq restart"
+            process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return json.dumps({"client": { "name": dhcp_data["name"] } })
+        else:
+            return json.dumps({"check": checks})
+    else:
+        return json.dumps({"missing": missing_data })
 
 
 @admin_v1.route("/add/switch", methods=["POST"])
@@ -248,24 +302,34 @@ def dhcp_conf(switch_name):
     return json.dumps(result)
 
 
+def delele_dhcp_ip(client_ip):
+    cmd = "sed -i '/%s$/d' /etc/dnsmasq.conf" % client_ip
+    process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cmd = "service dnsmasq restart"
+    process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    
+def delele_dhcp_mac(client_mac):
+    cmd = "sed -i '/%s/d' /etc/dnsmasq.conf" % client_mac
+    process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cmd = "service dnsmasq restart"
+    process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 @admin_v1.route("/switch/dhcp_conf/<string:switch_name>/del", methods=["POST"])
 @auth
 def dhcp_conf_del(switch_name):
     result = { "errors": [] }
     flask_data = flask.request.json
     if "ip" not in flask_data or "mac" not in flask_data:
-        result["errors"].append("Required parameters: 'ip' and 'mac'")
+        result["errors"].append("Required parameters: 'ip' or 'mac'")
         return json.dumps(result)
     # Delete records in dnsmasq configuration using IP
     if len(flask_data["ip"]) > 0:
-        cmd = "sed -i '/%s$/d' /etc/dnsmasq.conf" % flask_data["ip"]
-        process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        delele_dhcp_ip(flask_data["ip"])
     # Delete records in dnsmasq configuration using MAC
     if len(flask_data["mac"]) > 0:
-        cmd = "sed -i '/%s/d' /etc/dnsmasq.conf" % flask_data["mac"]
-        process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    cmd = "service dnsmasq restart"
-    process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        delele_dhcp_mac(flask_data["mac"])
     return json.dumps(result)
 
 
@@ -489,6 +553,10 @@ def delete(el_type):
             for to_del in existing:
                 db.delete(to_del)
             close_session(db)
+        elif el_type == "client":
+            # Delete a DHCP client (IP address is in the 'name' attribute)
+            delele_dhcp_ip(data["name"])
+            existing = [ data["name"] ]
         else:
             return {"type_error": data["type"] }
         return { "delete": len(existing) }

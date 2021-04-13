@@ -5,6 +5,10 @@
     "db_url": "sqlite:///test-worker.db",
     "comments": "Do not forget the ending '/' at the end of the env_path",
     "env_path": "/root/usb_envs/",
+    "comments": "Required properties to add DHCP clients in the dnsmasq configuration",
+    "client_prop": [
+        "name", "ip", "mac_address" 
+    ],
     "comments": "Required properties to add switches",
     "switch_prop": [
         "name", "ip", "community", "master_port", "oid_first_port" 

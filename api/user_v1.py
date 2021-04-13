@@ -1,4 +1,5 @@
 from api.auth import auth
+from api.tool import safe_string
 from database.connector import open_session, close_session, row2props
 from database.tables import Action, ActionProperty, Environment, Node, NodeProperty, Switch
 from datetime import datetime
@@ -15,6 +16,21 @@ user_v1 = Blueprint("user_v1", __name__)
 
 def row2dict(alchemyResult):
     return { c.key: getattr(alchemyResult, c.key) for c in inspect(alchemyResult).mapper.column_attrs }
+
+
+# List the DHCP clients
+@user_v1.route("/client/list", methods=["POST"])
+@auth
+def list_dhcp():
+    result = {}
+    with open("/etc/dnsmasq.conf", "r") as dhcp_conf:
+        for line in dhcp_conf.readlines():
+            if line.startswith("dhcp-host="):
+                line = line.replace(" ", "")
+                line = line[10:]
+                dhcp_info = line.split(",")
+                result[dhcp_info[1]] = { "mac_address": dhcp_info[0], "ip": dhcp_info[2] }
+    return json.dumps(result)
 
 
 @user_v1.route("/switch/list", methods=["POST"])
@@ -154,13 +170,13 @@ def my_node():
     for n in nodes:
         result["nodes"][n.name] = row2dict(n)
         node_names.append(n.name)
-    props = db.query(NodeProperty).filter(NodeProperty.name.in_(result["nodes"].keys())).all();
+    props = db.query(NodeProperty).filter(NodeProperty.name.in_(result["nodes"].keys())).all()
     for p in props:
         result["nodes"][p.name][p.prop_name] = p.prop_value
     envs = db.query(ActionProperty
         ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
         ).filter(ActionProperty.prop_name.in_(["environment", "os_password"])
-        ).all();
+        ).all()
     for e in envs:
         result["nodes"][e.node_name][e.prop_name] = e.prop_value
     close_session(db)
@@ -264,7 +280,7 @@ def deploy():
         if n.name in node_prop:
             duration = int(node_prop[n.name].pop("duration"))
             # Remove special characters from the node bin name
-            safe_value = node_prop[n.name].pop("node_bin").translate({ord(c): "" for c in "\"!@#$%^&*()[]{};:,./<>?\|`~=+"})
+            safe_value = safe_string(node_prop[n.name].pop("node_bin"))
             # Remove spaces from value
             safe_value = safe_value.replace(" ", "_")
             node_bin = safe_value
@@ -289,7 +305,7 @@ def deploy():
                         act_prop.node_name = n.name
                         act_prop.prop_name = prop
                         # Remove special characters from value
-                        safe_value = node_prop[n.name][prop].translate({ord(c): "" for c in "\"!@#$%^&*()[]{};:,/<>?\|`~=+"})
+                        safe_value = safe_string(node_prop[n.name][prop])
                         # Remove spaces from value
                         safe_value = safe_value.replace(" ", "_")
                         act_prop.prop_value = safe_value
