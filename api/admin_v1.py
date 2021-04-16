@@ -1,7 +1,7 @@
 from api.auth import auth
 from api.tool import safe_string, load_environment_names
 from database.connector import open_session, close_session
-from database.tables import Environment, Node, NodeProperty, Switch 
+from database.tables import Action, ActionProperty, Environment, Node, NodeProperty, Switch 
 from datetime import datetime
 from glob import glob
 from lib.config_loader import get_config
@@ -20,6 +20,40 @@ def new_switch_prop(switch_name, prop_name, prop_value):
     new_prop.prop_name = prop_name
     new_prop.prop_value = prop_value
     return new_prop
+
+
+@admin_v1.route("/node/rename", methods=["POST"])
+@auth
+def rename_nodes():
+    # Received data
+    rename_data = flask.request.json
+    if "base_name" not in rename_data:
+        return json.dumps({ "error": "'base_name' parameter is required" })
+    nodes = []
+    error = ""
+    db = open_session()
+    if len(db.query(Action).all()) > 0:
+        error = "can not rename the nodes: actions in progress"
+    else:
+        # Rename all nodes
+        for node in db.query(Node).all():
+            # We assume the node name looks like 'base_name-number'
+            current = node.name.split("-")[0]
+            node.name = node.name.replace(current, rename_data["base_name"])
+            nodes.append(node.name)
+        for node in db.query(NodeProperty).all():
+            # We assume the node name looks like 'base_name-number'
+            current = node.name.split("-")[0]
+            node.name = node.name.replace(current, rename_data["base_name"])
+        for node in db.query(ActionProperty).all():
+            # We assume the node name looks like 'base_name-number'
+            current = node.node_name.split("-")[0]
+            node.node_name = node.node_name.replace(current, rename_data["base_name"])
+    close_session(db)
+    if len(error) == 0:
+        return json.dumps({ "nodes": nodes })
+    else:
+        return json.dumps({ "error": error })
 
 
 # Add DHCP clients to the dnsmasq configuration
