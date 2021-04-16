@@ -369,6 +369,11 @@ def system_conf_exec(action, db):
             timeout=1.0,
             banner_timeout=1.0,
             auth_timeout=1.0)
+        if action.environment.startswith("tiny_core"):
+            # Set the hostname to modify the bash prompt
+            cmd = "sed -i 's/$/ host=%s/g' boot_dir/cmdline3.txt" % action.node_name
+            (stdin, stdout, stderr) = ssh.exec_command(cmd)
+            return_code = stdout.channel.recv_exit_status()
         if action.environment.startswith("ubuntu"):
             # Set the password of the 'ubuntu' user
             cmd = "sed -i 's/tototiti/%s/' boot_dir/user-data" % os_password
