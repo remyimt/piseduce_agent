@@ -16,7 +16,7 @@ from sqlalchemy import or_
 import logging, os, subprocess, sys, time
 
 
-# Import the action driver from config_worker.json
+# Import the action driver from config_agent.json
 node_type = get_config()["node_type"]
 # Import the action executor module
 exec_action_mod = import_module("%s.action_exec" % node_type)

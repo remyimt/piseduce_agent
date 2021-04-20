@@ -16,11 +16,11 @@ from flask import Flask
 import logging, sys
 
 # Create the application
-worker_api = Flask(__name__)
+agent_api = Flask(__name__)
 # Add routes from blueprints
-worker_api.register_blueprint(user_v1, url_prefix='/v1/user/')
-worker_api.register_blueprint(admin_v1, url_prefix='/v1/admin/')
-worker_api.register_blueprint(debug_v1, url_prefix='/v1/debug/')
+agent_api.register_blueprint(user_v1, url_prefix='/v1/user/')
+agent_api.register_blueprint(admin_v1, url_prefix='/v1/admin/')
+agent_api.register_blueprint(debug_v1, url_prefix='/v1/debug/')
 
 if __name__ == '__main__':
     logging.basicConfig(filename='info_api.log', level=logging.INFO,
@@ -29,4 +29,4 @@ if __name__ == '__main__':
     load_environment_names()
     # Start the application
     port_number = get_config()["port_number"]
-    worker_api.run(port=port_number, host="0.0.0.0")
+    agent_api.run(port=port_number, host="0.0.0.0")

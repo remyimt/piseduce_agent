@@ -2,12 +2,12 @@
 
 ### Start the API
 ```
-python3 worker_api.py
+python3 agent_api.py
 ```
 
 ### Start the action executor
 ```
-python3 worker_exec.py
+python3 agent_exec.py
 ```
 
 ### API description

@@ -1,12 +1,12 @@
 [Unit]
-Description=PiSeduce Workec Executor
+Description=PiSeduce Agent Executor
  
 [Service]
 Type=simple
 User=root
 Group=root
-WorkingDirectory=/root/piseduce_worker
-ExecStart=/usr/bin/python3 worker_exec.py config_worker.json
+WorkingDirectory=/root/piseduce_agent
+ExecStart=/usr/bin/python3 agent_exec.py config_agent.json
 ExecStop=/usr/bin/touch execstop
 ExecStopPost=/bin/rm execstop
 TimeoutStopSec=20

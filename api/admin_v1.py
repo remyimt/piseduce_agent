@@ -483,8 +483,8 @@ def clean_detect():
 def add_node():
     json_data = flask.request.json
     node_props = get_config()["node_prop"].copy()
-    worker_type = get_config()["node_type"]
-    node_props += get_config()[worker_type + "_prop"]
+    agent_type = get_config()["node_type"]
+    node_props += get_config()[agent_type + "_prop"]
     missing_data = {}
     for prop in node_props:
         if prop not in json_data:
@@ -509,7 +509,7 @@ def add_node():
         for to_del in existing:
             db.delete(to_del)
         node_db = Node()
-        node_db.type = worker_type
+        node_db.type = agent_type
         node_db.name = json_data["name"]
         node_db.ip = json_data["ip"]
         node_db.status = "available"

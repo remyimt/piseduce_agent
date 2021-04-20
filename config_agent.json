@@ -2,7 +2,7 @@
     "auth_token": [ "12345678912345678912" ],
     "port_number": 8090,
     "node_type": "raspberry",
-    "db_url": "sqlite:///test-worker.db",
+    "db_url": "sqlite:///test-agent.db",
     "comments": "Do not forget the ending '/' at the end of the env_path",
     "env_path": "/root/usb_envs/",
     "comments": "Required properties to add DHCP clients in the dnsmasq configuration",
@@ -21,7 +21,7 @@
     "node_prop": [
         "name", "ip"
     ],
-    "comments": "Required properties to add nodes according to the worker type",
+    "comments": "Required properties to add nodes according to the agent type",
     "fake_prop": [
         "fakeP1", "fakeP2"
     ],
