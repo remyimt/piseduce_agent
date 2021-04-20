@@ -287,12 +287,14 @@ def init_detect(switch_name):
 def dhcp_conf(switch_name):
     result = { "errors": [], "node_ip": "" }
     if "port" not in flask.request.json or "macs" not in flask.request.json or \
-            "network" not in flask.request.json or "ip_offset" not in flask.request.json:
-        result["errors"].append("Required parameters: 'port', 'macs', 'network' and 'ip_offset'")
+        "base_name" not in flask.request.json or \
+        "network" not in flask.request.json or "ip_offset" not in flask.request.json:
+        result["errors"].append("Required parameters: 'port', 'macs', 'network', 'base_name' and 'ip_offset'")
         return json.dumps(result)
-    node_port = int(flask.request.json["port"])
     known_macs = flask.request.json["macs"]
+    node_port = int(flask.request.json["port"])
     last_digit = int(flask.request.json["ip_offset"]) + node_port
+    node_name = "%s-%d" % (flask.request.json["base_name"], last_digit)
     node_ip = "%s.%d" % (flask.request.json["network"], last_digit)
     # Detect MAC address by sniffing DHCP requests
     logging.info('Reading system logs to get failed DHCP requests')
@@ -312,16 +314,16 @@ def dhcp_conf(switch_name):
                 mac = line.split(" ")[7]
                 if len(mac) == 17 and (mac.startswith("dc:a6:32") or mac.startswith("b8:27:eb")):
                     if mac in known_macs:
-                        logging.error("[node-%s] MAC '%s' already exists in the DHCP configuration" % (last_digit, mac))
+                        logging.error("[%s] MAC '%s' already exists in the DHCP configuration" % (node_name, mac))
                         result["errors"].append("%s already exists in the DHCP configuration!" % mac)
                         return json.dumps(result)
                     node_mac = mac
     if len(node_mac) > 0:
-        logging.info("[node-%s] new node with the MAC '%s'" % (last_digit, node_mac))
+        logging.info("[%s] new node with the MAC '%s'" % (node_name, node_mac))
         # Configure the node IP according to the MAC address
-        cmd = "echo 'dhcp-host=%s,node-%d,%s' >> /etc/dnsmasq.conf" % (node_mac, last_digit, node_ip)
+        cmd = "echo 'dhcp-host=%s,%s,%s' >> /etc/dnsmasq.conf" % (node_mac, node_name, node_ip)
         process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        logging.info("[node-%s] MAC: '%s', IP: '%s'" % (last_digit, node_mac, node_ip))
+        logging.info("[%s] MAC: '%s', IP: '%s'" % (node_name, node_mac, node_ip))
         # Restart dnsmasq
         cmd = "service dnsmasq restart"
         process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -332,7 +334,7 @@ def dhcp_conf(switch_name):
         # Fill the result
         result["node_ip"] = node_ip
     else:
-        logging.warning("[node-%s] no detected MAC" % node_port)
+        logging.warning("[%s] no detected MAC" % node_name)
     return json.dumps(result)
 
 
@@ -371,12 +373,13 @@ def dhcp_conf_del(switch_name):
 @auth
 def node_conf(switch_name):
     result = { "errors": [], "serial": "" }
-    if "node_ip" not in flask.request.json or "port" not in flask.request.json:
-        result["errors"].append("Required parameters: 'node_ip', 'port'")
+    if "node_ip" not in flask.request.json or "port" not in flask.request.json \
+        or "base_name" not in flask.request.json:
+        result["errors"].append("Required parameters: 'node_ip', 'base_name', 'port'")
         return json.dumps(result)
     node_ip = flask.request.json["node_ip"]
     node_port = flask.request.json["port"]
-    node_name = "node-%s" % node_ip.split(".")[-1]
+    node_name = "%s-%s" % (flask.request.json["base_name"], node_ip.split(".")[-1])
     node_model = ""
     node_serial = ""
     ssh = paramiko.SSHClient()
