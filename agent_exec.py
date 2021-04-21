@@ -145,8 +145,6 @@ if __name__ == "__main__":
     db = open_session()
     # Delete old information about the pimaster
     pimaster_info = db.query(NodeProperty).filter(NodeProperty.name == "pimaster").all()
-    for info in pimaster_info:
-        db.delete(info)
     # Register the information about the pimaster (me)
     if "user" in get_config():
         my_user = get_config()["user"]
@@ -166,16 +164,25 @@ if __name__ == "__main__":
             process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             my_ip = process.stdout.decode("utf-8").strip()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
-        user_record = NodeProperty()
-        user_record.name = "pimaster"
-        user_record.prop_name = "user"
-        user_record.prop_value = my_user
-        db.add(user_record)
-        ip_record = NodeProperty()
-        ip_record.name = "pimaster"
-        ip_record.prop_name = "ip"
-        ip_record.prop_value = my_ip
-        db.add(ip_record)
+        if pimaster_info is not None:
+            # Check the pimaster information
+            for info in pimaster_info:
+                if info.prop_name == "user" and info.prop_value != my_user:
+                    info.prop_value = my_user
+                if info.prop_name == "ip" and info.prop_value != my_ip:
+                    info.prop_value = my_ip
+        else:
+            # Add the pimaster information in the database
+            user_record = NodeProperty()
+            user_record.name = "pimaster"
+            user_record.prop_name = "user"
+            user_record.prop_value = my_user
+            db.add(user_record)
+            ip_record = NodeProperty()
+            ip_record.name = "pimaster"
+            ip_record.prop_name = "ip"
+            ip_record.prop_value = my_ip
+            db.add(ip_record)
         logging.info("pimaster ip: %s, pimaster user: %s" % (my_ip, my_user))
     else:
         logging.error("can not get the IP or the user of the pimaster: ip=%s, user=%s" % (my_ip, my_user))
