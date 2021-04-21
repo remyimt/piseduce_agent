@@ -7,7 +7,7 @@ from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, get_config
 from importlib import import_module
 from sqlalchemy import inspect, and_, or_
-from agent_exec import new_action, init_action_process
+from agent_exec import free_reserved_node, new_action, init_action_process
 import flask, json, logging
 
 
@@ -340,18 +340,17 @@ def destroy():
             ).filter(Node.owner == user
             ).all()
     for n in nodes:
-        n.status = "available"
-        logging.info("[%s] change status to 'available'" % n.name)
-        n.bin = None
-        n.owner = None
-        n.duration = None
-        n.start_date = None
-        actions = db.query(ActionProperty).filter(ActionProperty.node_name == n.name).all()
+        # Delete actions in progress
+        actions = db.query(Action).filter(Action.node_name == n.name).all()
         for action in actions:
             db.delete(action)
-        actions = db.query(Action).filter(ActionProperty.node_name == n.name).all()
-        for action in actions:
-            db.delete(action)
+        if n.status == "configuring":
+            free_reserved_node(n)
+        else:
+            # Create a new action to start the destroy action
+            node_action = new_action(n, db)
+            init_action_process(node_action, "destroy")
+            db.add(node_action)
         result[n.name] = "success"
     close_session(db)
     # Build the result

@@ -66,6 +66,8 @@ def new_action(db_node, db):
         act.environment = act_prop.prop_value
         act.node_name = db_node.name
         act.node_ip = db_node.ip
+    else:
+        logging.warning("[%s] can not create actions without detecting an associated environment" % db_node.name)
     db_node.status = "in_progress"
     return act
 
@@ -88,7 +90,7 @@ def load_reboot_state(db_action):
                 db_action.state_idx = None
             else:
                 db_action.state_idx = idx - 1
-            next_state_move(action)
+            next_state_move(db_action)
         else:
             logging.error("[%s] can not find the process for the '%s' state" % (
                 db_action.node_name, db_action.reboot_state))
@@ -113,10 +115,18 @@ def load_lost_state(db_node, db):
                 db_node.lost_state = None
             else:
                 logging.error("[%s] wrong configuration for the new action" % db_node.name)
-
         else:
             logging.error("[%s] can not find the process for the '%s' state" % (
                 db_node.name, db_node.lost_state))
+
+
+def free_reserved_node(db_node):
+    db_node.owner = None
+    db_node.bin = None
+    db_node.lost_state = None
+    db_node.start_date = None
+    db_node.duration = None
+    db_node.status = "available"
 
 
 if __name__ == "__main__":
@@ -193,12 +203,19 @@ if __name__ == "__main__":
                 logging.info("[%s] action is completed (current state: '%s')" % (
                     action.node_name, action.state))
                 # Update the node status with the action state
-                node = db.query(Node).filter(Node.name == action.node_name).all()
+                node = db.query(Node).filter(Node.name == action.node_name).first()
                 # As the Node.name is the primary key, only one node should be selected
-                for n in node:
-                    n.status = action.state
+                if node is not None:
+                    node.status = action.state
                     if action.state == "lost":
-                        n.lost_state = action.reboot_state
+                        node.lost_state = action.reboot_state
+                    if action.state == "destroyed":
+                        # Delete action properties
+                        properties = db.query(ActionProperty).filter(ActionProperty.node_name == node.name).all()
+                        for prop in properties:
+                            db.delete(prop)
+                        # Update the node fields
+                        free_reserved_node(node)
                 # Delete the action
                 db.delete(action)
             # Start actions for the recently configured nodes
