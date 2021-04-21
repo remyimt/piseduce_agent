@@ -143,26 +143,32 @@ if __name__ == "__main__":
     logging.info("### Final states: %s" % final_states)
     # Connection to the database
     db = open_session()
-    # Delete old information about the pimaster
-    pimaster_info = db.query(NodeProperty).filter(NodeProperty.name == "pimaster").all()
     # Register the information about the pimaster (me)
+    # Get the user account (this should be the root account)
     if "user" in get_config():
         my_user = get_config()["user"]
     else:
         cmd = "whoami"
         process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         my_user = process.stdout.decode("utf-8").strip()
+    # Get the private IP address that could be used by the agent to deploy nodes (used to deploy Raspberry)
     if "ip" in get_config():
         my_ip = get_config()["ip"]
     else:
         cmd = "hostname -i"
         process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        my_ip = process.stdout.decode("utf-8").strip()
+        my_ip = process.stdout.decode("utf-8").split()
+        if len(my_ip) > 0:
+            my_ip = my_ip[0]
         if len(my_ip) == 0 or len(my_ip.split(".")) != 4:
             # Try another command
             cmd = "hostname -I"
             process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            my_ip = process.stdout.decode("utf-8").strip()
+            my_ip = process.stdout.decode("utf-8").split()
+            if len(my_ip) > 0:
+                my_ip = my_ip[0]
+    # Update the pimaster information of the database
+    pimaster_info = db.query(NodeProperty).filter(NodeProperty.name == "pimaster").all()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
         if pimaster_info is not None:
             # Check the pimaster information

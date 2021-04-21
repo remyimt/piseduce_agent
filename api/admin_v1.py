@@ -22,6 +22,16 @@ def new_switch_prop(switch_name, prop_name, prop_value):
     return new_prop
 
 
+@admin_v1.route("/node/pimaster", methods=["POST"])
+@auth
+def pimaster_node():
+    db = open_session()
+    pimaster_ip = db.query(NodeProperty).filter(NodeProperty.name == "pimaster"
+        ).filter(NodeProperty.prop_name == "ip").first().prop_value
+    close_session(db)
+    return json.dumps({ "ip": pimaster_ip })
+
+
 @admin_v1.route("/node/rename", methods=["POST"])
 @auth
 def rename_nodes():
