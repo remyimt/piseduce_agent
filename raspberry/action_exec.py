@@ -287,7 +287,10 @@ def mount_partition_post(action, db):
             logging.error("[%s] boot partition is not mounted" % action.node_name)
             return False
         # Delete the bootcode.bin file to prevent RPI3 to boot from SDCARD
-        cmd = "rm boot_dir/bootcode.bin"
+        if action.environment.startswith("ubuntu"):
+            cmd = "rm boot_dir/firmware/bootcode.bin && sync"
+        else:
+            cmd = "rm boot_dir/bootcode.bin && sync"
         (stdin, stdout, stderr) = ssh.exec_command(cmd)
         return_code = stdout.channel.recv_exit_status()
         # Check the fs_dir mount point
@@ -526,7 +529,10 @@ def system_update_post(action, db):
         ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
         ret_fct = True
         if ps_ssh(ssh, "'update\|upgrade'") == 0:
-            cmd = "rm /boot/bootcode.bin"
+            if action.environment.startswith("ubuntu"):
+                cmd = "rm /boot/firmware/bootcode.bin"
+            else:
+                cmd = "rm /boot/bootcode.bin"
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
         else:
@@ -644,9 +650,13 @@ def destroying_exec(action, db):
     if node_prop["model"].startswith("RPI3"):
         # Delete the bootcode.bin file
         try:
+            cmd = "rm /boot/bootcode.bin && sync"
+            logging.info(action.environment)
+            if action.environment.startswith("ubuntu"):
+                cmd = "rm /boot/firmware/bootcode.bin && sync"
             # Try to connect to the deployed environment
             ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
-            (stdin, stdout, stderr) = ssh.exec_command("rm -f /boot/bootcode.bin")
+            (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
             ssh.close()
         except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
@@ -657,7 +667,11 @@ def destroying_exec(action, db):
                 cmd = "mount /dev/mmcblk0p1 boot_dir"
                 (stdin, stdout, stderr) = ssh.exec_command(cmd)
                 return_code = stdout.channel.recv_exit_status()
-                (stdin, stdout, stderr) = ssh.exec_command("rm -f boot_dir/bootcode.bin")
+                cmd = "rm boot_dir/bootcode.bin && sync"
+                if action.environment.startswith("ubuntu"):
+                    logging.info("use ubuntu nfs cmd")
+                    cmd = "rm boot_dir/firmware/bootcode.bin && sync"
+                (stdin, stdout, stderr) = ssh.exec_command(cmd)
                 return_code = stdout.channel.recv_exit_status()
                 ssh.close()
             except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
