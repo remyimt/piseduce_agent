@@ -91,13 +91,9 @@ def node_list():
                 result[node_prop.name][node_prop.prop_name] = node_prop.prop_value
     else:
         # Get all nodes
-        nodes = db.query(Node).filter(Node.type == get_config()["node_type"]).all()
+        nodes = db.query(Node).all()
         for n in nodes:
             result[n.name] = row2dict(n)
-        # Remove the useless type property
-        # TODO Do not write the type of the elements in the DB
-        for n in nodes:
-            del result[n.name]["type"]
     close_session(db)
     return json.dumps(result)
 
@@ -114,7 +110,6 @@ def node_status():
         nodes = db.query(Node).filter(Node.name.in_(flask.request.json["nodes"])).all()
     elif "user" in flask.request.json:
         nodes = db.query(Node
-            ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
             ).filter(Node.status != "configuring"
             ).all()
@@ -141,7 +136,7 @@ def node_prop():
     db = open_session()
     # Get the nodes
     result = {}
-    for n in db.query(Node).filter(Node.type == get_config()["node_type"]).all():
+    for n in db.query(Node).all():
         result[n.name] = row2dict(n)
     # Get the node properties
     for p in db.query(NodeProperty).all():
@@ -167,7 +162,6 @@ def my_node():
     # Get my nodes
     node_names = []
     nodes = db.query(Node
-            ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
             ).filter(Node.status != "configuring"
             ).all()
@@ -240,15 +234,15 @@ def configure():
     envs = db.query(Environment).filter(Environment.prop_name == "web").all()
     for env in envs:
         conf_prop["environment"]["values"].append(env.name)
-    # Get the specific properties according to the node type
+    # Get the nodes in the 'configuring' state
     nodes = db.query(Node
-            ).filter(Node.type == get_config()["node_type"]
             ).filter(Node.owner == flask.request.json["user"]
             ).filter(Node.status == "configuring"
             ).all()
     for n in nodes:
         if len(conf_prop) == 3:
-            conf_prop.update(get_config()["configure_prop"][n.type])
+            node_type = get_config()["node_type"]
+            conf_prop.update(get_config()["configure_prop"][node_type])
         result[n.name] = conf_prop
     close_session(db)
     return json.dumps(result)
@@ -272,7 +266,8 @@ def deploy():
     else:
         return json.dumps(error_msg)
     # Get the list of properties for the configuration
-    conf_prop = get_config()["configure_prop"]
+    node_type = get_config()["node_type"]
+    conf_prop = get_config()["configure_prop"][node_type]
     # Get the node with the 'configuring' status
     result = {}
     db = open_session()
@@ -290,7 +285,7 @@ def deploy():
             node_bin = safe_value
             result[n.name] = {}
             # Check required properties
-            required = [ prop for prop in conf_prop[n.type] if conf_prop[n.type][prop]["mandatory"] ]
+            required = [ prop for prop in conf_prop if conf_prop[prop]["mandatory"] ]
             for prop in required:
                 if prop not in node_prop[n.name]:
                     if "missing" not in result[n.name]:

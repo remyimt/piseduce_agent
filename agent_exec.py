@@ -195,7 +195,6 @@ if __name__ == "__main__":
         sys.exit(13)
     # Try to configure the lost nodes
     lost_nodes = db.query(Node
-        ).filter(Node.type == get_config()["node_type"]
         ).filter(Node.status == "lost"
         ).all()
     for node in lost_nodes:
@@ -235,7 +234,6 @@ if __name__ == "__main__":
                 db.delete(action)
             # Start actions for the recently configured nodes
             pending_nodes = db.query(Node
-                ).filter(Node.type == get_config()["node_type"]
                 ).filter(Node.status == "ready"
                 ).all()
             for node in pending_nodes:

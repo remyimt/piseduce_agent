@@ -430,7 +430,6 @@ def node_conf(switch_name):
             for to_del in existing:
                 db.delete(to_del)
             node_db = Node()
-            node_db.type = get_config()["node_type"]
             node_db.name = node_name
             node_db.ip = node_ip
             node_db.status = "available"
@@ -519,7 +518,6 @@ def add_node():
         for to_del in existing:
             db.delete(to_del)
         node_db = Node()
-        node_db.type = agent_type
         node_db.name = json_data["name"]
         node_db.ip = json_data["ip"]
         node_db.status = "available"

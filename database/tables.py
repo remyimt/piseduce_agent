@@ -4,7 +4,6 @@ from sqlalchemy import Boolean, Column, Integer, String, Text
 
 class Node(Base):
     __tablename__ = 'node'
-    type = Column(Text)
     name = Column(Text, primary_key=True)
     ip = Column(Text)
     owner = Column(Text)
