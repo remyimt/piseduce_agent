@@ -210,6 +210,8 @@ if __name__ == "__main__":
             reboot_actions = db.query(Action).filter(Action.state == "rebooted").all()
             for action in reboot_actions:
                 load_reboot_state(action)
+            # Commit the DB change due to rebooted nodes
+            db.commit()
             # Delete the actions in final states
             final_actions = db.query(Action).filter(Action.state.in_(final_states)).all()
             for action in final_actions:
