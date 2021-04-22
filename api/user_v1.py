@@ -126,6 +126,10 @@ def node_status():
                 result["nodes"][n.name]["status"] = "in_progress"
             else:
                 result["nodes"][n.name]["status"] = action.state.replace("_post", "").replace("_exec", "")
+    os_passwords = db.query(ActionProperty).filter(ActionProperty.node_name.in_(result["nodes"].keys())
+            ).filter(ActionProperty.prop_name == "os_password").all()
+    for pwd in os_passwords:
+        result["nodes"][pwd.node_name][pwd.prop_name] = pwd.prop_value
     close_session(db)
     return json.dumps(result)
 
