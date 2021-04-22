@@ -15,7 +15,7 @@
     ],
     "comments": "Required properties to add environments",
     "env_prop": [
-        "name", "type", "desc", "img_name", "img_size", "sector_start", "ssh_user", "web"
+        "name", "desc", "img_name", "img_size", "sector_start", "ssh_user", "web"
     ],
     "comments": "Common required properties to add nodes",
     "node_prop": [
