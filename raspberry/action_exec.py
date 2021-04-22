@@ -8,6 +8,9 @@ from paramiko.ssh_exception import BadHostKeyException, AuthenticationException,
 from raspberry.states import SSH_IDX
 import logging, os, paramiko, random, shutil, socket, string, subprocess, time
 
+# SSH timeout in seconds
+SSH_TIMEOUT = 3
+
 # Test if the processus exists on the remote node
 def ps_ssh(ssh_session, process):
     try:
@@ -92,7 +95,7 @@ def ssh_test_post(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(node_ip, username=ssh_user, timeout=1.0)
+        ssh.connect(node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
         (stdin, stdout, stderr) = ssh.exec_command("cat /etc/hostname")
         return_code = stdout.channel.recv_exit_status()
         myname = stdout.readlines()[0].strip()
@@ -118,7 +121,7 @@ def env_copy_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(node_ip, username="root", timeout=1.0)
+        ssh.connect(node_ip, username = "root", timeout = SSH_TIMEOUT)
         # Get the path to the IMG file
         img_path = env_path + env_prop["img_name"]
         logging.info("[%s] copy %s to the SDCARD" % (action.node_name, img_path))
@@ -144,7 +147,7 @@ def env_copy_post(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         if ps_ssh(ssh, "mmcblk0") > 0:
             ret_fct = True
         ssh.close()
@@ -165,7 +168,7 @@ def env_check_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         if ps_ssh(ssh, "mmcblk0") == 0:
             ret_fct = True
         else:
@@ -192,7 +195,7 @@ def delete_partition_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         # Register the size of the existing partition
         cmd = "rm progress-%s.txt; fdisk -l /dev/mmcblk0" % action.node_name
         (stdin, stdout, stderr) = ssh.exec_command(cmd)
@@ -227,7 +230,7 @@ def create_partition_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         moreMB = act_prop["part_size"]
         if moreMB == "whole":
             logging.info("[%s] create a partition with the whole free space" % action.node_name)
@@ -254,7 +257,7 @@ def mount_partition_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         # Update the deployment
         cmd = "mount /dev/mmcblk0p1 boot_dir"
         (stdin, stdout, stderr) = ssh.exec_command(cmd)
@@ -273,7 +276,7 @@ def mount_partition_post(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         # Check the boot_dir mount point
         cmd = "ls boot_dir/ | wc -l"
         (stdin, stdout, stderr) = ssh.exec_command(cmd)
@@ -306,7 +309,7 @@ def resize_partition_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         cmd = "resize2fs /dev/mmcblk0p2 &> /dev/null &"
         (stdin, stdout, stderr) = ssh.exec_command(cmd)
         return_code = stdout.channel.recv_exit_status()
@@ -322,7 +325,7 @@ def resize_partition_post(action, db):
         ret_fct = False
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         if ps_ssh(ssh, "resize2fs") > 0:
             ret_fct = True
         else:
@@ -345,7 +348,7 @@ def wait_resizing_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root", timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         ret_fct = False
         if ps_ssh(ssh, "resize2fs") == 0:
             ret_fct = True
@@ -375,10 +378,7 @@ def system_conf_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root",
-            timeout=1.0,
-            banner_timeout=1.0,
-            auth_timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         if action.environment.startswith("tiny_core"):
             # Set the hostname to modify the bash prompt
             cmd = "sed -i 's/$/ host=%s/g' boot_dir/cmdline3.txt" % action.node_name
@@ -452,10 +452,7 @@ def boot_files_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username="root",
-            timeout=1.0,
-            banner_timeout=1.0,
-            auth_timeout=1.0)
+        ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
         (stdin, stdout, stderr) = ssh.exec_command("reboot")
         return_code = stdout.channel.recv_exit_status()
         ssh.close()
@@ -490,10 +487,7 @@ def system_update_exec(action, db):
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(action.node_ip, username=ssh_user,
-                timeout=1.0,
-                banner_timeout=1.0,
-                auth_timeout=1.0)
+            ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
             cmd = "apt-get update"
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
@@ -529,10 +523,7 @@ def system_update_post(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username=ssh_user, 
-            timeout=1.0,
-            banner_timeout=1.0,
-            auth_timeout=1.0)
+        ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
         ret_fct = True
         if ps_ssh(ssh, "'update\|upgrade'") == 0:
             cmd = "rm /boot/bootcode.bin"
@@ -579,10 +570,7 @@ def boot_update_exec(action, db):
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(action.node_ip, username=ssh_user,
-                timeout=1.0,
-                banner_timeout=1.0,
-                auth_timeout=1.0)
+            ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
             cmd = "reboot"
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
@@ -604,10 +592,7 @@ def user_conf_exec(action, db):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(action.node_ip, username=ssh_user,
-            timeout=1.0,
-            banner_timeout=1.0,
-            auth_timeout=1.0)
+        ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
         # Get the user SSH key from the DB
         my_ssh_keys = ""
         if "ssh_key_1" in act_prop and len(act_prop["ssh_key_1"]) > 256:
@@ -660,7 +645,7 @@ def destroying_exec(action, db):
         # Delete the bootcode.bin file
         try:
             # Try to connect to the deployed environment
-            ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = 1.0)
+            ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
             (stdin, stdout, stderr) = ssh.exec_command("rm -f /boot/bootcode.bin")
             return_code = stdout.channel.recv_exit_status()
             ssh.close()
@@ -668,7 +653,7 @@ def destroying_exec(action, db):
             logging.info("[%s] can not connect to the deployed environment" % action.node_name)
             try:
                 # Try to connect to the nfs environment
-                ssh.connect(action.node_ip, username = "root", timeout = 1.0)
+                ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
                 cmd = "mount /dev/mmcblk0p1 boot_dir"
                 (stdin, stdout, stderr) = ssh.exec_command(cmd)
                 return_code = stdout.channel.recv_exit_status()
@@ -681,7 +666,7 @@ def destroying_exec(action, db):
         # Check the booloader configuration (netboot)
         try:
             # Try to connect to the deployed environment
-            ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = 1.0)
+            ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
             # Check the booted system is the NFS system
             (stdin, stdout, stderr) = ssh.exec_command("cat /etc/hostname")
             return_code = stdout.channel.recv_exit_status()
