@@ -135,12 +135,6 @@ def add_switch():
         existing = db.query(Switch).filter(Switch.name == switch_data["name"]).all()
         for to_del in existing:
             db.delete(to_del)
-        # Compute the last digit of the IP address of the node on the first port of the new switch
-        all_switches = db.query(Switch).filter(Switch.prop_name == "port_nb").all()
-        last_digit = 1
-        for sw in all_switches:
-            last_digit += int(sw.prop_value)
-        close_session(db)
         # Check the IP
         ip_check = False
         cmd = 'ping -c 1 -W 1 %s' % switch_data['ip']
@@ -157,8 +151,32 @@ def add_switch():
             checks["community"]["check"] = snmp_check
             checks["oid_first_port"]["check"] = snmp_check
         if ip_check and snmp_check:
-            # Add the switch
             db = open_session()
+            # Get information about existing switches to reserve the IP range for the nodes connected to the new switch
+            all_switches = db.query(Switch).filter(Switch.prop_name.in_(["port_nb", "first_ip"])).all()
+            existing_info = {}
+            for sw in all_switches:
+                if sw.name not in existing_info:
+                    existing_info[sw.name] = {}
+                existing_info[sw.name][sw.prop_name] = int(sw.prop_value)
+            # Sort the switch information on the 'first_ip' property
+            existing_info = { k: v for k, v in sorted(existing_info.items(), key = lambda item: item[1]["first_ip"]) }
+            # Choose the last digit of the first IP such as [last_digit, last_digit + port_nb] is available
+            last_digit = 1
+            for sw in existing_info.values():
+                new_last = last_digit + switch_info["port_nb"] - 1
+                if new_last < sw["first_ip"]:
+                    # We found the last_digit value
+                    break
+                else:
+                    last_digit = sw["first_ip"] + sw["port_nb"]
+            if last_digit + switch_info["port_nb"] - 1 > 250:
+                close_session(db)
+                msg = "No IP range available for the switch '%s' with %d ports" % (
+                        switch_data["name"], switch_info["port_nb"])
+                logging.error(msg)
+                return json.dumps({ "error": msg })
+            # Add the switch
             db.add(new_switch_prop(switch_data["name"], "ip", switch_data["ip"]))
             db.add(new_switch_prop(switch_data["name"], "community", switch_data["community"]))
             db.add(new_switch_prop(switch_data["name"], "port_nb", switch_info["port_nb"]))

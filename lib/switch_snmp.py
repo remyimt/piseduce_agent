@@ -4,22 +4,32 @@ import subprocess
 
 
 def switch_test(ip, community, oid):
-    nb_port = 0
-    cmd = "snmpwalk -v2c -c %s %s %s" % (community, ip, oid[:oid.rindex(".")])
-    process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
-    power_state = process.stdout.split("\n")
-    power_state = [p.split(" = ")[0] for p in power_state if len(p) > 0]
-    if process.returncode == 0 and len(power_state) > 0:
-        oid_first_port = power_state[0]
-        offset = int(oid_first_port[oid_first_port.rindex("."):][1:]) - 1
-        detected_oid = oid_first_port[:oid_first_port.rindex(".")]
-        return {
-            "success": True,
-            "oid": detected_oid,
-            "port_nb": len(power_state),
-            "offset":  offset
-        }
-    else:
+    try:
+        nb_port = 0
+        cmd = "snmpwalk -v2c -c %s %s %s" % (community, ip, oid[:oid.rindex(".")])
+        process = subprocess.run(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            universal_newlines=True, timeout=30)
+        power_state = process.stdout.split("\n")
+        power_state = [p.split(" = ")[0] for p in power_state if len(p) > 0]
+        if process.returncode == 0 and len(power_state) > 0:
+            oid_first_port = power_state[0]
+            offset = int(oid_first_port[oid_first_port.rindex("."):][1:]) - 1
+            detected_oid = oid_first_port[:oid_first_port.rindex(".")]
+            return {
+                "success": True,
+                "oid": detected_oid,
+                "port_nb": len(power_state),
+                "offset":  offset
+            }
+        else:
+            return {
+                "success": False,
+                "oid": "useless",
+                "port_nb": 0,
+                "offset":  -1
+            }
+    except:
+        logging.exception("switch test failure:")
         return {
             "success": False,
             "oid": "useless",
