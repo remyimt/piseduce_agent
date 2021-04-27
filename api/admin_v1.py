@@ -32,6 +32,36 @@ def pimaster_node():
     return json.dumps({ "ip": pimaster_ip })
 
 
+@admin_v1.route("/pimaster/changeip", methods=["POST"])
+@auth
+def pimaster_changeip():
+    new_ip = flask.request.json["new_ip"]
+    new_network = new_ip[:new_ip.rindex(".")]
+    # Check the static IP configuration
+    cmd = "grep '^static ip_address' /etc/dhcpcd.conf"
+    process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        universal_newlines=True)
+    static_conf = process.stdout.strip()
+    if len(static_conf) > 0:
+        ip = static_conf.split("=")[1].replace("/24", "")
+        network = ip[:ip.rindex(".")]
+        # Change the static IP
+        cmd = "sed -i 's:=%s/:=%s/:g' /etc/dhcpcd.conf" % (ip, new_ip)
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Change the IP of the DHCP server
+        cmd = "sed -i 's:=%s:=%s:g' /etc/dnsmasq.conf" % (ip, new_ip)
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Change the IP of the DHCP clients
+        cmd = "sed -i 's:,%s:,%s:g' /etc/dnsmasq.conf" % (network, new_network)
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Delete the DHCP leases
+        cmd = "rm /var/lib/misc/dnsmasq.leases"
+        process = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return json.dumps({ "msg": "IP configuration is successfully changed. You need to reboot pimaster!" })
+    else:
+        return json.dumps({ "msg": "The agent is not configured with a static IP" })
+
+
 @admin_v1.route("/node/rename", methods=["POST"])
 @auth
 def rename_nodes():
