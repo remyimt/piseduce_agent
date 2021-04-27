@@ -170,7 +170,8 @@ if __name__ == "__main__":
     # Update the pimaster information of the database
     pimaster_info = db.query(NodeProperty).filter(NodeProperty.name == "pimaster").all()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
-        if pimaster_info is not None:
+        if pimaster_info is not None and len(pimaster_info) > 0:
+            logging.info("Update the pimaster information from existing DB records")
             # Check the pimaster information
             for info in pimaster_info:
                 if info.prop_name == "user" and info.prop_value != my_user:
@@ -179,6 +180,7 @@ if __name__ == "__main__":
                     info.prop_value = my_ip
         else:
             # Add the pimaster information in the database
+            logging.info("Create new records to register the pimaster information")
             user_record = NodeProperty()
             user_record.name = "pimaster"
             user_record.prop_name = "user"
