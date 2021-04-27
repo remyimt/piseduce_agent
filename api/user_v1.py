@@ -303,11 +303,14 @@ def deploy():
                         act_prop = ActionProperty()
                         act_prop.node_name = n.name
                         act_prop.prop_name = prop
-                        # Remove special characters from value
-                        safe_value = safe_string(node_prop[n.name][prop])
-                        # Remove spaces from value
-                        safe_value = safe_value.replace(" ", "_")
-                        act_prop.prop_value = safe_value
+                        if "ssh_key" in prop:
+                            act_prop.prop_value = node_prop[n.name][prop]
+                        else:
+                            # Remove special characters from value
+                            safe_value = safe_string(node_prop[n.name][prop])
+                            # Remove spaces from value
+                            safe_value = safe_value.replace(" ", "_")
+                            act_prop.prop_value = safe_value
                         db.add(act_prop)
                 n.status = "ready"
                 n.bin = node_bin

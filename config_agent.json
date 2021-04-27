@@ -39,8 +39,7 @@
             "update_os": { "values": [ "no", "yes" ], "mandatory": true },
             "part_size": { "values": [ "whole", "1gb"], "mandatory": true },
             "os_password": { "values": [], "mandatory": false },
-            "ssh_key_1": { "values": [], "mandatory": false },
-            "ssh_key_2": { "values": [], "mandatory": false }
+            "form_ssh_key": { "values": [], "mandatory": false }
         },
         "sensor": {
             "os": { "values": [], "mandatory": true }

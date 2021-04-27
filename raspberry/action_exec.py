@@ -589,7 +589,7 @@ def boot_update_exec(action, db):
 def user_conf_exec(action, db):
     act_prop = row2props(db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
-        ).filter(ActionProperty.prop_name.in_(["os_password", "ssh_key_1", "ssh_key_2" ])
+        ).filter(ActionProperty.prop_name.in_(["os_password", "form_ssh_key", "account_ssh_key" ])
         ).all())
     ssh_user = db.query(Environment
         ).filter(Environment.name  == action.environment
@@ -601,16 +601,14 @@ def user_conf_exec(action, db):
         ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
         # Get the user SSH key from the DB
         my_ssh_keys = ""
-        if "ssh_key_1" in act_prop and len(act_prop["ssh_key_1"]) > 256:
+        # Copy the SSH key provided in the configuring form
+        if "form_ssh_key" in act_prop and len(act_prop["form_ssh_key"]) > 256:
+            my_ssh_keys = "%s" % act_prop["form_ssh_key"]
+        if "account_ssh_key" in act_prop and len(act_prop["account_ssh_key"]) > 256:
             if len(my_ssh_keys) == 0:
-                my_ssh_keys = "%s" % act_prop["ssh_key_1"]
+                my_ssh_keys = "%s" % act_prop["account_ssh_key"]
             else:
-                my_ssh_keys = "%s\n%s" % (my_ssh_keys, act_prop["ssh_key_1"])
-        if "ssh_key_2" in act_prop and len(act_prop["ssh_key_2"]) > 256:
-            if len(my_ssh_keys) == 0:
-                my_ssh_keys = "%s" % act_prop["ssh_key_2"]
-            else:
-                my_ssh_keys = "%s\n%s" % (my_ssh_keys, act_prop["ssh_key_2"])
+                my_ssh_keys = "%s\n%s" % (my_ssh_keys, act_prop["account_ssh_key"])
         if len(my_ssh_keys) > 0:
             # Add the public key of the user
             cmd = "echo '%s' >> .ssh/authorized_keys" % my_ssh_keys
