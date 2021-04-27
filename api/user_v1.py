@@ -175,7 +175,19 @@ def my_node():
         ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
         ).filter(ActionProperty.prop_name.in_(["environment", "os_password"])
         ).all()
+    env_web = {}
     for e in envs:
+        if e.prop_name == "environment":
+            # Check if the environment provides a web interface
+            if e.prop_value not in env_web:
+                has_web = db.query(Environment).filter(Environment.name == e.prop_value
+                    ).filter(Environment.prop_name == "web").first().prop_value
+                env_web[e.prop_value] = has_web
+            if env_web[e.prop_value]:
+                #result["nodes"][e.node_name]["url"] = "http://%s:8181" % result["nodes"][e.node_name]["ip"]
+                # Hack for the PiSeduce cluster
+                result["nodes"][e.node_name]["url"] = "https://pi%02d.seduce.fr" % (
+                        int(result["nodes"][e.node_name]["port_number"]))
         result["nodes"][e.node_name][e.prop_name] = e.prop_value
     close_session(db)
     return json.dumps(result)
