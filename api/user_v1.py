@@ -122,7 +122,7 @@ def node_status():
             else:
                 result["nodes"][n.name]["status"] = action.state.replace("_post", "").replace("_exec", "")
     os_passwords = db.query(ActionProperty).filter(ActionProperty.node_name.in_(result["nodes"].keys())
-            ).filter(ActionProperty.prop_name == "os_password").all()
+            ).filter(ActionProperty.prop_name.in_(["os_password", "percent"])).all()
     for pwd in os_passwords:
         result["nodes"][pwd.node_name][pwd.prop_name] = pwd.prop_value
     close_session(db)
@@ -183,7 +183,7 @@ def my_node():
                 has_web = db.query(Environment).filter(Environment.name == e.prop_value
                     ).filter(Environment.prop_name == "web").first().prop_value
                 env_web[e.prop_value] = has_web
-            if env_web[e.prop_value]:
+            if env_web[e.prop_value] == "true":
                 #result["nodes"][e.node_name]["url"] = "http://%s:8181" % result["nodes"][e.node_name]["ip"]
                 # Hack for the PiSeduce cluster
                 result["nodes"][e.node_name]["url"] = "https://pi%02d.seduce.fr" % (
