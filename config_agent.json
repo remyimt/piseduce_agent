@@ -37,7 +37,7 @@
         },
         "raspberry": {
             "update_os": { "values": [ "no", "yes" ], "mandatory": true },
-            "part_size": { "values": [ "whole", "1gb"], "mandatory": true },
+            "part_size": { "values": [ "whole", "2gb", "5gb", "10gb" ], "mandatory": true },
             "os_password": { "values": [], "mandatory": false },
             "form_ssh_key": { "values": [], "mandatory": false }
         },

@@ -201,17 +201,14 @@ def delete_partition_exec(action, db):
         (stdin, stdout, stderr) = ssh.exec_command(cmd)
         return_code = stdout.channel.recv_exit_status()
         output = stdout.readlines()
-        # Delete the second partition
-        cmd = "(echo d; echo 2; echo w) | fdisk -u /dev/mmcblk0"
-        (stdin, stdout, stderr) = ssh.exec_command(cmd)
-        return_code = stdout.channel.recv_exit_status()
-        ssh.close()
-        # Save the system size in sectors
-        act_prop = ActionProperty()
-        act_prop.node_name = action.node_name
-        act_prop.prop_name = "system_size"
-        act_prop.prop_value = int(output[-1].split()[3])
-        db.add(act_prop)
+        if "mmcblk0p2" in output[-1]:
+            # Delete the second partition
+            cmd = "(echo d; echo 2; echo w) | fdisk -u /dev/mmcblk0"
+            (stdin, stdout, stderr) = ssh.exec_command(cmd)
+            return_code = stdout.channel.recv_exit_status()
+            ssh.close()
+        else:
+            logging.info("[%s] No second partition detected" % action.node_name)
         return True
     except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
         logging.warning("[%s] SSH connection failed" % action.node_name)
@@ -225,22 +222,23 @@ def create_partition_exec(action, db):
         ).first().prop_value
     act_prop = row2props(db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
-        ).filter(ActionProperty.prop_name.in_(["system_size", "part_size" ])
+        ).filter(ActionProperty.prop_name == "part_size"
         ).all())
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
-        moreMB = act_prop["part_size"]
-        if moreMB == "whole":
+        size_str = act_prop["part_size"]
+        if "gb" in size_str:
+            part_size = int(size_str.replace("gb", "")) * 1024
+            # Total size of the new partition in sectors (512B)
+            part_size = part_size * 1024 * 1024 / 512
+            logging.info("[%s] create a partition with a size of %d sectors" % (action.node_name, part_size))
+            cmd = ("(echo n; echo p; echo 2; echo '%s'; echo '+%d'; echo w) | fdisk -u /dev/mmcblk0" %
+                (sector_start, part_size))
+        else:
             logging.info("[%s] create a partition with the whole free space" % action.node_name)
             cmd = ("(echo n; echo p; echo 2; echo '%s'; echo ''; echo w) | fdisk -u /dev/mmcblk0" % sector_start)
-        else:
-            # Total size of the new partition in sectors (512B)
-            moreSpace = act_prop["system_size"] + (int(moreMB) * 1024 * 1024 / 512)
-            logging.info("[%s] create a partition with a size of %d sectors" % (action.node_name, moreSpace))
-            cmd = ("(echo n; echo p; echo 2; echo '%s'; echo '+%d'; echo w) | fdisk -u /dev/mmcblk0" %
-                (sector_start, moreSpace))
         (stdin, stdout, stderr) = ssh.exec_command(cmd)
         return_code = stdout.channel.recv_exit_status()
         cmd = "partprobe"
