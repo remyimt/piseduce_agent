@@ -636,66 +636,66 @@ def destroying_exec(action, db):
         ).filter(NodeProperty.name  == action.node_name
         ).filter(NodeProperty.prop_name.in_(["model", "serial" ])
         ).all())
-    ssh_user_db = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name == "ssh_user"
-        ).first()
-    # When destroying initialized deployments, the environment is unset
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    if node_prop["model"].startswith("RPI3"):
-        # Delete the bootcode.bin file
-        try:
-            cmd = "rm /boot/bootcode.bin && sync"
-            logging.info(action.environment)
-            if action.environment.startswith("ubuntu"):
-                cmd = "rm /boot/firmware/bootcode.bin && sync"
-            # Try to connect to the deployed environment
-            ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
-            (stdin, stdout, stderr) = ssh.exec_command(cmd)
-            return_code = stdout.channel.recv_exit_status()
-            ssh.close()
-        except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
-            logging.info("[%s] can not connect to the deployed environment" % action.node_name)
+    if action.environment is not None:
+        ssh_user_db = db.query(Environment
+            ).filter(Environment.name  == action.environment
+            ).filter(Environment.prop_name == "ssh_user"
+            ).first()
+        # When destroying initialized deployments, the environment is unset
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        if node_prop["model"].startswith("RPI3"):
+            # Delete the bootcode.bin file
             try:
-                # Try to connect to the nfs environment
-                ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
-                cmd = "mount /dev/mmcblk0p1 boot_dir"
-                (stdin, stdout, stderr) = ssh.exec_command(cmd)
-                return_code = stdout.channel.recv_exit_status()
-                cmd = "rm boot_dir/bootcode.bin && sync"
+                cmd = "rm /boot/bootcode.bin && sync"
                 if action.environment.startswith("ubuntu"):
-                    cmd = "rm boot_dir/firmware/bootcode.bin && sync"
+                    cmd = "rm /boot/firmware/bootcode.bin && sync"
+                # Try to connect to the deployed environment
+                ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
                 (stdin, stdout, stderr) = ssh.exec_command(cmd)
                 return_code = stdout.channel.recv_exit_status()
                 ssh.close()
             except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
-                logging.info("[%s] can not connect to the NFS environment" % action.node_name)
-    if node_prop["model"].startswith("RPI4"):
-        # Check the booloader configuration (netboot)
-        try:
-            # Try to connect to the deployed environment
-            ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
-            # Check the booted system is the NFS system
-            (stdin, stdout, stderr) = ssh.exec_command("cat /etc/hostname")
-            return_code = stdout.channel.recv_exit_status()
-            myname = stdout.readlines()[0].strip()
-            if myname == "nfspi":
-                logging.info("[%s] Destroy a node running on the NFS system." % action.node_name)
-            else:
-                (stdin, stdout, stderr) = ssh.exec_command("rpi-eeprom-config | grep BOOT_ORDER")
+                logging.info("[%s] can not connect to the deployed environment" % action.node_name)
+                try:
+                    # Try to connect to the nfs environment
+                    ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
+                    cmd = "mount /dev/mmcblk0p1 boot_dir"
+                    (stdin, stdout, stderr) = ssh.exec_command(cmd)
+                    return_code = stdout.channel.recv_exit_status()
+                    cmd = "rm boot_dir/bootcode.bin && sync"
+                    if action.environment.startswith("ubuntu"):
+                        cmd = "rm boot_dir/firmware/bootcode.bin && sync"
+                    (stdin, stdout, stderr) = ssh.exec_command(cmd)
+                    return_code = stdout.channel.recv_exit_status()
+                    ssh.close()
+                except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
+                    logging.info("[%s] can not connect to the NFS environment" % action.node_name)
+        if node_prop["model"].startswith("RPI4"):
+            # Check the booloader configuration (netboot)
+            try:
+                # Try to connect to the deployed environment
+                ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
+                # Check the booted system is the NFS system
+                (stdin, stdout, stderr) = ssh.exec_command("cat /etc/hostname")
                 return_code = stdout.channel.recv_exit_status()
-                output = stdout.readlines()
-                if len(output) > 0:
-                    boot_order_line = output[0].strip()
-                    if boot_order_line.startswith("BOOT_ORDER") and boot_order_line[-1] != "2":
-                        logging.error("[%s] wrong boot order value. Please update the EEPROM config!" % action.node_name)
-                        return False
+                myname = stdout.readlines()[0].strip()
+                if myname == "nfspi":
+                    logging.info("[%s] Destroy a node running on the NFS system." % action.node_name)
                 else:
-                    logging.info("[%s] No boot_order line (environment: %s)" % (action.node_name, action.environment))
-            ssh.close()
-        except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
-            logging.info("[%s] can not connect to the deployed environment" % action.node_name)
+                    (stdin, stdout, stderr) = ssh.exec_command("rpi-eeprom-config | grep BOOT_ORDER")
+                    return_code = stdout.channel.recv_exit_status()
+                    output = stdout.readlines()
+                    if len(output) > 0:
+                        boot_order_line = output[0].strip()
+                        if boot_order_line.startswith("BOOT_ORDER") and boot_order_line[-1] != "2":
+                            logging.error("[%s] wrong boot order value. Please update the EEPROM config!" % action.node_name)
+                            return False
+                    else:
+                        logging.info("[%s] No boot_order line (environment: %s)" % (action.node_name, action.environment))
+                ssh.close()
+            except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
+                logging.info("[%s] can not connect to the deployed environment" % action.node_name)
     # Delete the tftpboot folder
     tftpboot_node_folder = "/tftpboot/%s" % node_prop["serial"]
     if os.path.isdir(tftpboot_node_folder):
