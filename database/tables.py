@@ -1,5 +1,5 @@
 from database.base import Base
-from sqlalchemy import Boolean, Column, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 
 class Node(Base):
@@ -10,7 +10,7 @@ class Node(Base):
     bin = Column(Text)
     status = Column(Text)
     lost_state = Column(Text)
-    start_date = Column(Text)
+    start_date = Column(DateTime)
     duration = Column(Integer)
 
 
@@ -52,7 +52,7 @@ class Action(Base):
     state = Column(String(120))
     state_idx = Column(Integer)
     reboot_state = Column(String(120))
-    updated_at = Column(Text)
+    updated_at = Column(DateTime)
 
 
     def __repr__(self):
@@ -67,3 +67,10 @@ class ActionProperty(Base):
     prop_value = Column(Text)
 
 
+class Filter(Base):
+    __tablename__ = 'filter'
+    uid = Column(Integer, primary_key=True, autoincrement=True)
+    owner = Column(Text)
+    prop_name = Column(Text)
+    prop_value = Column(Text)
+    start_date = Column(DateTime)

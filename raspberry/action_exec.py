@@ -178,8 +178,7 @@ def env_check_exec(action, db):
             output = stdout.readlines()
             if len(output) == 0:
                 logging.warning("%s: no progress value for the running environment copy" % action.node_name)
-                updated = datetime.strptime(action.updated_at, DATE_FORMAT)
-                elapsedTime = (datetime.now() - updated).total_seconds()
+                elapsedTime = (datetime.now() - action.updated_at).total_seconds()
                 # Compute the progress value with an assumed transfert rate of 8 MB/s
                 percent = round(elapsedTime * 8000000 * 100 / img_size)
             else:

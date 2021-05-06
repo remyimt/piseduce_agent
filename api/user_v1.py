@@ -15,7 +15,13 @@ user_v1 = Blueprint("user_v1", __name__)
 
 
 def row2dict(alchemyResult):
-    return { c.key: getattr(alchemyResult, c.key) for c in inspect(alchemyResult).mapper.column_attrs }
+    result = {}
+    for c in inspect(alchemyResult).mapper.column_attrs:
+        if isinstance(getattr(alchemyResult, c.key), datetime):
+            result[c.key] = getattr(alchemyResult, c.key).strftime(DATE_FORMAT)
+        else:
+            result[c.key] = getattr(alchemyResult, c.key)
+    return result
 
 
 # List the DHCP clients
@@ -222,7 +228,7 @@ def reserve():
         ).filter(Node.status == "available"
         ).all()
     for n in nodes:
-        n.start_date = post_data["start_date"]
+        n.start_date = datetime.strptime(post_data["start_date"], DATE_FORMAT)
         n.duration = post_data["duration"]
         n.owner = user
         n.status = "configuring"
@@ -269,7 +275,7 @@ def configure():
     # We assume that the duration is the same for all nodes
     result["duration"] = duration
     # We assume that the start_date is the same for all nodes
-    result["start_date"] = start_date
+    result["start_date"] = start_date.strftime(DATE_FORMAT)
     close_session(db)
     return json.dumps(result)
 

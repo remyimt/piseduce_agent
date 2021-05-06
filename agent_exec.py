@@ -51,7 +51,7 @@ def next_state_move(db_action):
             return False
     # Set the state of the action to the next state of the process
     db_action.state = state_list[db_action.state_idx]
-    db_action.updated_at = datetime.utcnow().strftime(DATE_FORMAT)
+    db_action.updated_at = datetime.utcnow()
     logging.info("[%s] changes to the '%s' state" % (db_action.node_name, db_action.state))
     return True
 
@@ -209,9 +209,8 @@ if __name__ == "__main__":
             # Release the expired nodes
             now = datetime.utcnow()
             for node in db.query(Node).filter(Node.start_date != "").all():
-                node_date = datetime.strptime(node.start_date, DATE_FORMAT)
                 hours_added = timedelta(hours = node.duration)
-                node_date = node_date + hours_added
+                node_date = node.start_date + hours_added
                 if now > node_date:
                     # The reservation is expired, check if a destroy action is in progress
                     destroy_action = db.query(Action
@@ -260,8 +259,7 @@ if __name__ == "__main__":
                 logging.info("agent time: %s" % now)
                 for node in pending_nodes:
                     # Check the start date
-                    node_date = datetime.strptime(node.start_date, DATE_FORMAT)
-                    if node_date < now:
+                    if node.start_date < now:
                         logging.info("[%s] starts the deploy process (start date: %s)" % (node.name, node_date))
                         act = new_action(node, db)
                         init_action_process(act, "deploy")
@@ -308,9 +306,8 @@ if __name__ == "__main__":
                         # The node is not ready, test the reboot timeout
                         logging.warning("[%s] fails to execute '%s'" % (action.node_name, state_fct))
                         if action.updated_at is None:
-                            action.updated_at = datetime.utcnow().strftime(DATE_FORMAT)
-                        updated = datetime.strptime(str(action.updated_at), DATE_FORMAT)
-                        elapsedTime = (datetime.utcnow() - updated).total_seconds()
+                            action.updated_at = datetime.utcnow()
+                        elapsedTime = (datetime.utcnow() - action.updated_at).total_seconds()
                         action_state = action.state.replace("_exec", "").replace("_post","")
                         reboot_timeout = STATE_DESC[action_state]["before_reboot"]
                         do_lost = True
