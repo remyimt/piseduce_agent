@@ -218,6 +218,7 @@ if __name__ == "__main__":
                         ).filter(Action.node_name == node.name
                         ).filter(Action.process == "destroy").all()
                     if len(destroy_action) == 0:
+                        logging.info("agent time: %s" % now)
                         logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.name, node_date))
                         node_action = new_action(node, db)
                         init_action_process(node_action, "destroy")
