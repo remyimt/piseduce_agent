@@ -9,7 +9,7 @@ load_config(sys.argv[1])
 
 from database.connector import open_session, close_session
 from database.tables import Action, ActionProperty, Node, NodeProperty
-from datetime import datetime
+from datetime import datetime, timedelta
 from importlib import import_module
 from lib.config_loader import DATE_FORMAT, load_config
 from sqlalchemy import or_
@@ -51,7 +51,7 @@ def next_state_move(db_action):
             return False
     # Set the state of the action to the next state of the process
     db_action.state = state_list[db_action.state_idx]
-    db_action.updated_at = datetime.now().strftime(DATE_FORMAT)
+    db_action.updated_at = datetime.utcnow().strftime(DATE_FORMAT)
     logging.info("[%s] changes to the '%s' state" % (db_action.node_name, db_action.state))
     return True
 
@@ -64,10 +64,8 @@ def new_action(db_node, db):
         ).first()
     if act_prop is not None:
         act.environment = act_prop.prop_value
-        act.node_name = db_node.name
-        act.node_ip = db_node.ip
-    else:
-        logging.warning("[%s] can not create actions without detecting an associated environment" % db_node.name)
+    act.node_name = db_node.name
+    act.node_ip = db_node.ip
     db_node.status = "in_progress"
     return act
 
@@ -135,6 +133,7 @@ if __name__ == "__main__":
     # Logging configuration
     logging.basicConfig(filename='info_exec.log', level=logging.INFO,
         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    logging.info("## Starting the agent executor")
     # Detect the final states
     final_states = [ "lost" ]
     for state in STATE_DESC:
@@ -207,6 +206,23 @@ if __name__ == "__main__":
     while not os.path.isfile(STOP_FILE):
         db = open_session()
         try:
+            # Release the expired nodes
+            now = datetime.utcnow()
+            for node in db.query(Node).filter(Node.start_date != "").all():
+                node_date = datetime.strptime(node.start_date, DATE_FORMAT)
+                hours_added = timedelta(hours = node.duration)
+                node_date = node_date + hours_added
+                if now > node_date:
+                    # The reservation is expired, check if a destroy action is in progress
+                    destroy_action = db.query(Action
+                        ).filter(Action.node_name == node.name
+                        ).filter(Action.process == "destroy").all()
+                    if len(destroy_action) == 0:
+                        logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.name, node_date))
+                        node_action = new_action(node, db)
+                        init_action_process(node_action, "destroy")
+                        db.add(node_action)
+            db.commit()
             # Load reboot_state for the actions in the 'rebooted' state or in the 'lost' state
             reboot_actions = db.query(Action).filter(Action.state == "rebooted").all()
             for action in reboot_actions:
@@ -238,11 +254,19 @@ if __name__ == "__main__":
             pending_nodes = db.query(Node
                 ).filter(Node.status == "ready"
                 ).all()
-            for node in pending_nodes:
-                logging.info("[%s] starts the deploy process" % node.name)
-                act = new_action(node, db)
-                init_action_process(act, "deploy")
-                db.add(act)
+            if len(pending_nodes) > 0:
+                now = datetime.utcnow()
+                logging.info("agent time: %s" % now)
+                for node in pending_nodes:
+                    # Check the start date
+                    node_date = datetime.strptime(node.start_date, DATE_FORMAT)
+                    if node_date < now:
+                        logging.info("[%s] starts the deploy process (start date: %s)" % (node.name, node_date))
+                        act = new_action(node, db)
+                        init_action_process(act, "deploy")
+                        db.add(act)
+                    else:
+                        logging.info("[%s] is waiting for starting the deployment (start date: %s)" % (node.name, node_date))
             # Process the ongoing actions
             pending_actions = db.query(Action).filter(~Action.state.in_(final_states)
                 ).all()
@@ -283,9 +307,9 @@ if __name__ == "__main__":
                         # The node is not ready, test the reboot timeout
                         logging.warning("[%s] fails to execute '%s'" % (action.node_name, state_fct))
                         if action.updated_at is None:
-                            action.updated_at = datetime.now().strftime(DATE_FORMAT)
+                            action.updated_at = datetime.utcnow().strftime(DATE_FORMAT)
                         updated = datetime.strptime(str(action.updated_at), DATE_FORMAT)
-                        elapsedTime = (datetime.now() - updated).total_seconds()
+                        elapsedTime = (datetime.utcnow() - updated).total_seconds()
                         action_state = action.state.replace("_exec", "").replace("_post","")
                         reboot_timeout = STATE_DESC[action_state]["before_reboot"]
                         do_lost = True

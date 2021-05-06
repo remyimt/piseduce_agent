@@ -197,12 +197,19 @@ def my_node():
 @user_v1.route("/reserve", methods=["POST"])
 @auth
 def reserve():
+    post_data = flask.request.json
     # Check POST data
-    if "nodes" not in flask.request.json or \
-        "user" not in flask.request.json:
-        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
-    wanted = flask.request.json["nodes"]
-    user = flask.request.json["user"]
+    if "nodes" not in post_data or "user" not in post_data or \
+        "start_date" not in post_data or "duration" not in post_data:
+            logging.error("Missing parameters: '%s'" % post_data)
+            return json.dumps({
+                "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr', start_date: '2021-06-21 14:36:32', 'duration': 3"
+            })
+    if len(post_data["start_date"]) != 19:
+        logging.error("Wrong date format: '%s'" % post_data["start_date"])
+        return json.dumps({"parameters": "Wrong date format (required: YYYY-MM-DD HH-MM)"})
+    wanted = post_data["nodes"]
+    user = post_data["user"]
     if len(user) == 0 or '@' not in  user:
         for n in wanted:
             result[n] = "no_email"
@@ -215,10 +222,11 @@ def reserve():
         ).filter(Node.status == "available"
         ).all()
     for n in nodes:
+        n.start_date = post_data["start_date"]
+        n.duration = post_data["duration"]
+        n.owner = user
         n.status = "configuring"
         logging.info("[%s] change status to 'configuring'" % n.name)
-        n.owner = user
-        n.start_date = datetime.now().strftime(DATE_FORMAT)
         result[n.name] = row2dict(n)
     close_session(db)
     # Build the result
@@ -252,10 +260,16 @@ def configure():
             ).filter(Node.status == "configuring"
             ).all()
     for n in nodes:
+        duration = n.duration
+        start_date = n.start_date
         if len(conf_prop) == 3:
             node_type = get_config()["node_type"]
             conf_prop.update(get_config()["configure_prop"][node_type])
         result[n.name] = conf_prop
+    # We assume that the duration is the same for all nodes
+    result["duration"] = duration
+    # We assume that the start_date is the same for all nodes
+    result["start_date"] = start_date
     close_session(db)
     return json.dumps(result)
 
@@ -265,7 +279,7 @@ def configure():
 def deploy():
     # Check the parameters
     error_msg = { "parameters": 
-            "user: 'email@is.fr', 'nodes': {'node-3': { 'node_bin': 'my_bin', 'duration': '4', 'environment': 'my-env' }}" }
+            "user: 'email@is.fr', 'nodes': {'node-3': { 'node_bin': 'my_bin', 'environment': 'my-env' }}" }
     if "user" not in flask.request.json or "@" not in flask.request.json["user"] or \
         "nodes" not in flask.request.json:
         return json.dumps(error_msg)
@@ -285,11 +299,10 @@ def deploy():
     db = open_session()
     nodes = db.query(Node
             ).filter(Node.owner == flask.request.json["user"]
-            ).filter(or_(Node.status == "configuring", Node.status == "ready")
+            ).filter(Node.status.in_(["configuring", "ready"])
             ).all()
     for n in nodes:
         if n.name in node_prop:
-            duration = int(node_prop[n.name].pop("duration"))
             # Remove special characters from the node bin name
             safe_value = safe_string(node_prop[n.name].pop("node_bin"))
             # Remove spaces from value
@@ -326,7 +339,6 @@ def deploy():
                         db.add(act_prop)
                 n.status = "ready"
                 n.bin = node_bin
-                n.duration = duration
                 logging.info("[%s] change status to 'ready'" % n.name)
                 result[n.name]["status"] = n.status
     close_session(db)
