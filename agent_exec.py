@@ -8,8 +8,8 @@ if len(sys.argv) != 2:
 load_config(sys.argv[1])
 
 from database.connector import open_session, close_session
-from database.tables import Action, ActionProperty, Node, NodeProperty
-from datetime import datetime, timedelta
+from database.tables import Action, ActionProperty, Node, NodeProperty, Schedule
+from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from lib.config_loader import DATE_FORMAT, load_config
 from sqlalchemy import or_
@@ -51,12 +51,22 @@ def next_state_move(db_action):
             return False
     # Set the state of the action to the next state of the process
     db_action.state = state_list[db_action.state_idx]
-    db_action.updated_at = datetime.utcnow()
+    db_action.updated_at = datetime.now(timezone.utc)
     logging.info("[%s] changes to the '%s' state" % (db_action.node_name, db_action.state))
     return True
 
 
 def new_action(db_node, db):
+    # Delete existing actions
+    existing = db.query(Action).filter(Action.node_name == db_node.name).all()
+    for e in existing:
+        db.delete(e)
+    # Get the node IP
+    node_ip = db.query(NodeProperty
+        ).filter(NodeProperty.name == db_node.name
+        ).filter(NodeProperty.prop_name == "ip"
+        ).first().prop_value
+    # Add a new action
     act = Action()
     act_prop = db.query(ActionProperty
         ).filter(ActionProperty.node_name == db_node.name
@@ -65,9 +75,39 @@ def new_action(db_node, db):
     if act_prop is not None:
         act.environment = act_prop.prop_value
     act.node_name = db_node.name
-    act.node_ip = db_node.ip
+    act.node_ip = node_ip
     db_node.status = "in_progress"
     return act
+
+
+def save_reboot_state(db_action, db):
+    reboot_str = ""
+    reboot_state = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == db_action.node_name
+        ).filter(ActionProperty.prop_name == "reboot_state"
+        ).first()
+    if db_action.state_idx is None:
+        # This is an hardreboot action initiated by the user, check if the node is deployed
+        is_deployed = db.query(Schedule
+            ).filter(Schedule.name == db_action.node_name
+            ).filter(Schedule.action_state == "deployed"
+            ).first()
+        if is_deployed is not None:
+            for process in PROCESS["deploy"]:
+                if len(process["environments"]) == 0 or db_action.environment in process["environments"]:
+                    reboot_str = "deploy?!%d" % (len(process["states"]) - 1)
+    else:
+        reboot_str = "%s?!%d" % (db_action.process, db_action.state_idx)
+    if len(reboot_str) > 0:
+        # Remember the last state of the current process
+        if reboot_state is None:
+            reboot_prop = ActionProperty()
+            reboot_prop.node_name = db_action.node_name
+            reboot_prop.prop_name = "reboot_state"
+            reboot_prop.prop_value = reboot_str
+            db.add(reboot_prop)
+        else:
+            reboot_state.prop_value = reboot_str
 
 
 def init_action_process(db_action, process_name):
@@ -77,10 +117,14 @@ def init_action_process(db_action, process_name):
     next_state_move(db_action)
 
 
-def load_reboot_state(db_action):
-    if db_action.reboot_state is not None and len(db_action.reboot_state) > 0:
-        logging.info("[%s] load the reboot state '%s'" % (db_action.node_name, db_action.reboot_state))
-        process_info = db_action.reboot_state.split("?!")
+def load_reboot_state(db_action, db):
+    reboot_state = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == db_action.node_name
+        ).filter(ActionProperty.prop_name == "reboot_state"
+        ).first()
+    if reboot_state is not None and reboot_state.prop_value is not None and len(reboot_state.prop_value) > 0:
+        logging.info("[%s] load the reboot state '%s'" % (db_action.node_name, reboot_state.prop_value))
+        process_info = reboot_state.prop_value.split("?!")
         if len(process_info) == 2:
             db_action.process = process_info[0]
             idx = int(process_info[1])
@@ -89,42 +133,24 @@ def load_reboot_state(db_action):
             else:
                 db_action.state_idx = idx - 1
             next_state_move(db_action)
+            return True
         else:
             logging.error("[%s] can not find the process for the '%s' state" % (
-                db_action.node_name, db_action.reboot_state))
+                db_action.node_name, reboot_state.prop_value))
+    else:
+        logging.error("[%s] can not detect the reboot_state" % db_action.node_name)
+    return False
 
 
-def load_lost_state(db_node, db):
-    if db_node.lost_state is not None and len(db_node.lost_state) > 0:
-        logging.info("[%s] load the lost state '%s'" % (db_node.name, db_node.lost_state))
-        process_info = db_node.lost_state.split("?!")
-        if len(process_info) == 2:
-            # Create a new action to continue the process
-            act = new_action(db_node, db)
-            if len(act.node_name) > 0 and len(act.environment) > 0:
-                act.process = process_info[0]
-                idx = int(process_info[1])
-                if idx == 0:
-                    act.state_idx = None
-                else:
-                    act.state_idx = idx - 1
-                db.add(act)
-                next_state_move(act)
-                db_node.lost_state = None
-            else:
-                logging.error("[%s] wrong configuration for the new action" % db_node.name)
-        else:
-            logging.error("[%s] can not find the process for the '%s' state" % (
-                db_node.name, db_node.lost_state))
-
-
-def free_reserved_node(db_node):
-    db_node.owner = None
-    db_node.bin = None
-    db_node.lost_state = None
-    db_node.start_date = None
-    db_node.duration = None
-    db_node.status = "available"
+def free_reserved_node(db, node_name):
+    # Delete action properties
+    properties = db.query(ActionProperty).filter(ActionProperty.node_name == node_name).all()
+    for prop in properties:
+        db.delete(prop)
+    # Delete reservations to the schedule
+    reservations = db.query(Schedule).filter(Schedule.name == node_name).all()
+    for res in reservations:
+        db.delete(res)
 
 
 if __name__ == "__main__":
@@ -195,30 +221,48 @@ if __name__ == "__main__":
         logging.error("can not get the IP or the user of the pimaster: ip=%s, user=%s" % (my_ip, my_user))
         sys.exit(13)
     # Try to configure the lost nodes
-    lost_nodes = db.query(Node
-        ).filter(Node.status == "lost"
+    lost_nodes = db.query(Schedule
+        ).filter(Schedule.action_state == "lost"
         ).all()
     for node in lost_nodes:
         logging.info("[%s] lost node rescue" % node.name)
-        load_lost_state(node, db)
+        # Create a new action to continue the deployment
+        act = new_action(node, db)
+        # Load the reboot_state
+        if load_reboot_state(act, db):
+            # The action is successfully configured, add it
+            db.add(act)
+            # Delete the reboot_state to allow the node to reboot
+            reboot_state = db.query(ActionProperty
+                ).filter(ActionProperty.node_name == node.name
+                ).filter(ActionProperty.prop_name == "reboot_state"
+                ).first()
+            if reboot_state is not None:
+                reboot_state.prop_value = None
+        else:
+            # The reboot action can not be executed
+            node.status = "ready"
+
     close_session(db)
     # Analyzing the database
     while not os.path.isfile(STOP_FILE):
         db = open_session()
         try:
             # Release the expired nodes
-            now = datetime.utcnow()
-            for node in db.query(Node).filter(Node.start_date != "").all():
-                hours_added = timedelta(hours = node.duration)
-                node_date = node.start_date + hours_added
-                if now > node_date:
-                    # The reservation is expired, check if a destroy action is in progress
+            now = datetime.now(timezone.utc)
+            now = now.replace(tzinfo = None)
+            for node in db.query(Schedule).filter(Schedule.end_date < now).all():
+                logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.name, node.end_date))
+                # The reservation is expired, delete it
+                if node.status == "configuring":
+                    # The node is not deployed
+                    free_reserved_node(db, node.name)
+                else:
+                    # Check if a destroy action is in progress
                     destroy_action = db.query(Action
                         ).filter(Action.node_name == node.name
                         ).filter(Action.process == "destroy").all()
                     if len(destroy_action) == 0:
-                        logging.info("agent time: %s" % now)
-                        logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.name, node_date))
                         node_action = new_action(node, db)
                         init_action_process(node_action, "destroy")
                         db.add(node_action)
@@ -226,7 +270,7 @@ if __name__ == "__main__":
             # Load reboot_state for the actions in the 'rebooted' state or in the 'lost' state
             reboot_actions = db.query(Action).filter(Action.state == "rebooted").all()
             for action in reboot_actions:
-                load_reboot_state(action)
+                load_reboot_state(action, db)
             # Commit the DB change due to rebooted nodes
             db.commit()
             # Delete the actions in final states
@@ -234,38 +278,33 @@ if __name__ == "__main__":
             for action in final_actions:
                 logging.info("[%s] action is completed (current state: '%s')" % (
                     action.node_name, action.state))
-                # Update the node status with the action state
-                node = db.query(Node).filter(Node.name == action.node_name).first()
-                # As the Node.name is the primary key, only one node should be selected
+                # Update the action_state of the reservation
+                node = db.query(Schedule
+                    ).filter(Schedule.status == "in_progress"
+                    ).filter(Schedule.name == action.node_name
+                    ).first()
                 if node is not None:
-                    node.status = action.state
-                    if action.state == "lost":
-                        node.lost_state = action.reboot_state
+                    node.status = "ready"
+                    node.action_state = action.state
                     if action.state == "destroyed":
-                        # Delete action properties
-                        properties = db.query(ActionProperty).filter(ActionProperty.node_name == node.name).all()
-                        for prop in properties:
-                            db.delete(prop)
                         # Update the node fields
-                        free_reserved_node(node)
+                        free_reserved_node(db, node.name)
                 # Delete the action
                 db.delete(action)
             # Start actions for the recently configured nodes
-            pending_nodes = db.query(Node
-                ).filter(Node.status == "ready"
+            now = datetime.now(timezone.utc)
+            now = now.replace(tzinfo = None)
+            pending_nodes = db.query(Schedule
+                ).filter(Schedule.status == "ready"
+                ).filter(Schedule.action_state == ""
+                ).filter(Schedule.start_date < now
                 ).all()
             if len(pending_nodes) > 0:
-                now = datetime.utcnow()
-                logging.info("agent time: %s" % now)
                 for node in pending_nodes:
-                    # Check the start date
-                    if node.start_date < now:
-                        logging.info("[%s] starts the deploy process (start date: %s)" % (node.name, node_date))
-                        act = new_action(node, db)
-                        init_action_process(act, "deploy")
-                        db.add(act)
-                    else:
-                        logging.info("[%s] is waiting for starting the deployment (start date: %s)" % (node.name, node_date))
+                    logging.info("[%s] starts the deploy process (start date: %s)" % (node.name, node.start_date))
+                    act = new_action(node, db)
+                    init_action_process(act, "deploy")
+                    db.add(act)
             # Process the ongoing actions
             pending_actions = db.query(Action).filter(~Action.state.in_(final_states)
                 ).all()
@@ -306,19 +345,24 @@ if __name__ == "__main__":
                         # The node is not ready, test the reboot timeout
                         logging.warning("[%s] fails to execute '%s'" % (action.node_name, state_fct))
                         if action.updated_at is None:
-                            action.updated_at = datetime.utcnow()
-                        elapsedTime = (datetime.utcnow() - action.updated_at).total_seconds()
+                            action.updated_at = datetime.now(timezone.utc)
+                        now = datetime.now(timezone.utc)
+                        now = now.replace(tzinfo = None)
+                        elapsedTime = (now - action.updated_at).total_seconds()
                         action_state = action.state.replace("_exec", "").replace("_post","")
                         reboot_timeout = STATE_DESC[action_state]["before_reboot"]
                         do_lost = True
                         reboot_str = "%s?!%d" % (action.process, action.state_idx)
-                        if reboot_timeout > 0 and \
-                            action.process != "reboot" and action.reboot_state != reboot_str:
+                        reboot_state = db.query(ActionProperty
+                                ).filter(ActionProperty.node_name == action.node_name
+                                ).filter(ActionProperty.prop_name == "reboot_state"
+                                ).first()
+                        if reboot_timeout > 0 and action.process != "reboot" \
+                            and (reboot_state is None or reboot_state.prop_value != reboot_str):
                             do_lost = False
                             if elapsedTime > reboot_timeout:
                                 logging.warning("[%s] hard reboot the node" % action.node_name)
-                                # Remember the last state of the current process
-                                action.reboot_state = reboot_str
+                                save_reboot_state(action, db)
                                 init_action_process(action, "reboot")
                             else:
                                 logging.info("[%s] not ready since %d seconds" % (action.node_name, elapsedTime))
@@ -328,8 +372,7 @@ if __name__ == "__main__":
                             if elapsedTime > lost_timeout:
                                 logging.warning("[%s] is lost. Stop monitoring it!" % action.node_name)
                                 if action.process != "reboot":
-                                    # Remember the last state of the current process
-                                    action.reboot_state = reboot_str
+                                    save_reboot_state(action, db)
                                 action.state = "lost"
                             else:
                                 logging.info("[%s] not ready since %d seconds" %(action.node_name, elapsedTime))

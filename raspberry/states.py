@@ -70,7 +70,7 @@ STATE_DESC = {
     'resize_partition': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 5 },
     'wait_resizing': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 90 },
     'system_conf': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
-    'boot_files': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
+    'boot_files': { 'exec': True, 'post': False, 'before_reboot': 20, 'lost': 5 },
     'system_update': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
     'boot_update': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'user_conf': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 1 },

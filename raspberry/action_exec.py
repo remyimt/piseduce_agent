@@ -1,5 +1,5 @@
 from database.connector import row2props
-from database.tables import ActionProperty, Node, NodeProperty, Environment
+from database.tables import ActionProperty, NodeProperty, Environment
 from datetime import datetime
 from glob import glob
 from lib.config_loader import DATE_FORMAT, get_config
@@ -456,16 +456,17 @@ def boot_files_exec(action, db):
         (stdin, stdout, stderr) = ssh.exec_command("reboot")
         return_code = stdout.channel.recv_exit_status()
         ssh.close()
-        if return_code == 0:
-            # Waiting for the node is turned off
-            ret = 0
-            while ret == 0:
-                logging.info("[%s] Waiting lost connection..." % action.node_name)
-                time.sleep(1)
-                ret = os.system("ping -W 1 -c 1 %s" % action.node_ip)
-            return True
+        # Waiting for the node is turned off
+        ret = 0
+        max_attempt = 10
+        while ret == 0 and max_attempt > 0:
+            max_attempt -= 1
+            logging.info("[%s] Waiting lost connection..." % action.node_name)
+            time.sleep(3)
+            ret = os.system("ping -W 1 -c 1 %s" % action.node_ip)
+        return ret != 0
     except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
-        logging.warning("[%s] SSH connection failed" % action.node_name)
+        logging.exception("[%s] SSH connection failed" % action.node_name)
     return False
 
 

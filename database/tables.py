@@ -5,17 +5,11 @@ from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 class Node(Base):
     __tablename__ = 'node'
     name = Column(Text, primary_key=True)
-    ip = Column(Text)
-    owner = Column(Text)
-    bin = Column(Text)
     status = Column(Text)
-    lost_state = Column(Text)
-    start_date = Column(DateTime)
-    duration = Column(Integer)
 
 
     def __repr__(self):
-        return "Node(%s, %s, %s)" % (self.name, self.status, self.owner)
+        return "Node(%s, %s)" % (self.name, self.status)
 
 
 class NodeProperty(Base):
@@ -51,7 +45,6 @@ class Action(Base):
     process = Column(Text)
     state = Column(String(120))
     state_idx = Column(Integer)
-    reboot_state = Column(String(120))
     updated_at = Column(DateTime)
 
 
@@ -65,12 +58,19 @@ class ActionProperty(Base):
     node_name = Column(Text)
     prop_name = Column(Text)
     prop_value = Column(Text)
-
-
-class Filter(Base):
-    __tablename__ = 'filter'
-    uid = Column(Integer, primary_key=True, autoincrement=True)
     owner = Column(Text)
-    prop_name = Column(Text)
-    prop_value = Column(Text)
+
+
+class Schedule(Base):
+    __tablename__ = 'schedule'
+    name = Column(Text, primary_key=True)
+    owner = Column(Text, primary_key=True)
+    bin = Column(Text)
     start_date = Column(DateTime)
+    end_date = Column(DateTime)
+    status = Column(Text)
+    action_state = Column(Text)
+
+
+    def __repr__(self):
+        return "schedule(%s, %s, %s)" % (self.name, self.status, self.start_date)
