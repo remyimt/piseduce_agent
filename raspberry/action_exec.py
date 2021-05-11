@@ -31,7 +31,7 @@ def new_password(stringLength=8):
 # States of the 'deploy' process (deploy environments)
 def boot_conf_exec(action, db):
     serial = db.query(NodeProperty
-            ).filter(NodeProperty.name  == action.node_name
+            ).filter(NodeProperty.node_name  == action.node_name
             ).filter(NodeProperty.prop_name == "serial").first().prop_value
     # Create a folder containing network boot files that will be served via TFTP
     tftpboot_template_folder = "/tftpboot/rpiboot_uboot"
@@ -46,7 +46,7 @@ def boot_conf_exec(action, db):
 
 def turn_off_exec(action, db):
     node_prop = row2props(db.query(NodeProperty
-        ).filter(NodeProperty.name  == action.node_name
+        ).filter(NodeProperty.node_name  == action.node_name
         ).filter(NodeProperty.prop_name.in_(["switch", "port_number"])).all())
     # Turn off port
     turn_off_port(node_prop["switch"], node_prop["port_number"])
@@ -55,7 +55,7 @@ def turn_off_exec(action, db):
 
 def turn_on_exec(action, db):
     node_prop = row2props(db.query(NodeProperty
-        ).filter(NodeProperty.name  == action.node_name
+        ).filter(NodeProperty.node_name  == action.node_name
         ).filter(NodeProperty.prop_name.in_(["switch", "port_number"])).all())
     # Turn on port
     turn_on_port(node_prop["switch"], node_prop["port_number"])
@@ -64,7 +64,7 @@ def turn_on_exec(action, db):
 
 def turn_on_post(action, db):
     node_ip = db.query(NodeProperty
-            ).filter(NodeProperty.name  == action.node_name
+            ).filter(NodeProperty.node_name  == action.node_name
             ).filter(NodeProperty.prop_name == "ip").first().prop_value
     cmd = "ping -W 1 -c 1 %s" % node_ip
     subproc = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -73,7 +73,7 @@ def turn_on_post(action, db):
 
 def ssh_test_post(action, db):
     node_ip = db.query(NodeProperty
-            ).filter(NodeProperty.name  == action.node_name
+            ).filter(NodeProperty.node_name  == action.node_name
             ).filter(NodeProperty.prop_name == "ip").first().prop_value
     # By default, we use the ssh_user of the environment. We assume the environment is deployed
     ssh_user = db.query(Environment
@@ -114,9 +114,9 @@ def ssh_test_post(action, db):
 def env_copy_exec(action, db):
     env_path = get_config()["env_path"]
     node_ip = db.query(NodeProperty
-            ).filter(NodeProperty.name  == action.node_name
+            ).filter(NodeProperty.node_name  == action.node_name
             ).filter(NodeProperty.prop_name == "ip").first().prop_value
-    pimaster_prop = row2props(db.query(NodeProperty).filter(NodeProperty.name  == "pimaster").all())
+    pimaster_prop = row2props(db.query(NodeProperty).filter(NodeProperty.node_name  == "pimaster").all())
     env_prop = row2props(db.query(Environment).filter(Environment.name  == action.environment).all())
     try:
         ssh = paramiko.SSHClient()
@@ -128,15 +128,21 @@ def env_copy_exec(action, db):
         # Write the image of the environment on SD card
         deploy_cmd = "rsh -o StrictHostKeyChecking=no %s@%s 'cat %s' | tar xzOf - | \
             pv -n -p -s %s 2> progress-%s.txt | dd of=/dev/mmcblk0 bs=4M conv=fsync &" % (
-            pimaster_prop["user"], pimaster_prop["ip"], img_path, env_prop["img_size"], action.node_name)
+            pimaster_prop["master_user"], pimaster_prop["master_ip"], img_path, env_prop["img_size"], action.node_name)
         (stdin, stdout, stderr) = ssh.exec_command(deploy_cmd)
         return_code = stdout.channel.recv_exit_status()
         ssh.close()
-        act_prop = ActionProperty()
-        act_prop.node_name = action.node_name
-        act_prop.prop_name = "percent"
-        act_prop.prop_value = 0
-        db.add(act_prop)
+        act_prop = db.query(ActionProperty
+            ).filter(ActionProperty.node_name == action.node_name
+            ).filter(ActionProperty.prop_name == "percent").first()
+        if act_prop is None:
+            act_prop = ActionProperty()
+            act_prop.node_name = action.node_name
+            act_prop.prop_name = "percent"
+            act_prop.prop_value = 0
+            db.add(act_prop)
+        else:
+            act_prop.prop_value = 0
     except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
         logging.warning("[%s] SSH connection failed" % action.node_name)
     return True
@@ -437,7 +443,7 @@ def system_conf_exec(action, db):
 
 def boot_files_exec(action, db):
     serial = db.query(NodeProperty
-        ).filter(NodeProperty.name  == action.node_name
+        ).filter(NodeProperty.node_name  == action.node_name
         ).filter(NodeProperty.prop_name == "serial"
         ).first().prop_value
     # Copy boot files to the tftp directory
@@ -555,7 +561,7 @@ def boot_update_exec(action, db):
         ).filter(Environment.prop_name == "ssh_user"
         ).first().prop_value
     serial = db.query(NodeProperty
-        ).filter(NodeProperty.name  == action.node_name
+        ).filter(NodeProperty.node_name  == action.node_name
         ).filter(NodeProperty.prop_name == "serial"
         ).first().prop_value
     # Copy boot files to the tftp directory
@@ -633,7 +639,7 @@ def user_conf_exec(action, db):
 # Destroying deployments
 def destroying_exec(action, db):
     node_prop = row2props(db.query(NodeProperty
-        ).filter(NodeProperty.name  == action.node_name
+        ).filter(NodeProperty.node_name  == action.node_name
         ).filter(NodeProperty.prop_name.in_(["model", "serial" ])
         ).all())
     if action.environment is not None:

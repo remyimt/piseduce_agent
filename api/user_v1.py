@@ -1,7 +1,7 @@
 from api.auth import auth
 from api.tool import safe_string
 from database.connector import open_session, close_session, row2props
-from database.tables import Action, ActionProperty, Environment, Node, NodeProperty, Schedule, Switch
+from database.tables import Action, ActionProperty, Environment, NodeProperty, Schedule, Switch
 from datetime import datetime, timedelta
 from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, get_config
@@ -69,41 +69,6 @@ def list_environment():
     return json.dumps(result)
 
 
-# Get the list of the nodes
-@user_v1.route("/node/list", methods=["POST"])
-@auth
-def node_list():
-    db = open_session()
-    result = {}
-    if "properties" in flask.request.json and len(flask.request.json["properties"]) > 0:
-        # Get the nodes with properties that match the request
-        props = flask.request.json["properties"]
-        if "name" in props:
-            node = db.query(Node).filter(Node.name == props["name"]).first()
-            if node is not None:
-                result[node.name] = props
-        else:
-            # Build the AND filters
-            ands = None
-            for prop, value in props.items():
-                if ands is None:
-                    ands = and_(NodeProperty.prop_name == prop, NodeProperty.prop_value == value)
-                else:
-                    ands = ands | and_(NodeProperty.prop_name == prop, NodeProperty.prop_value == value)
-            # Get the nodes with the right properties
-            for node_prop in db.query(NodeProperty).filter(ands).all():
-                if node_prop.name not in result:
-                    result[node_prop.name] = {}
-                result[node_prop.name][node_prop.prop_name] = node_prop.prop_value
-    else:
-        # Get all nodes
-        nodes = db.query(Node).all()
-        for n in nodes:
-            result[n.name] = row2dict(n)
-    close_session(db)
-    return json.dumps(result)
-
-
 @user_v1.route("/node/status", methods=["POST"])
 @auth
 def node_status():
@@ -111,7 +76,7 @@ def node_status():
     db = open_session()
     nodes = []
     if "nodes" in flask.request.json:
-        nodes = db.query(Schedule).filter(Schedule.name.in_(flask.request.json["nodes"])).all()
+        nodes = db.query(Schedule).filter(Schedule.node_name.in_(flask.request.json["nodes"])).all()
     elif "user" in flask.request.json:
         nodes = db.query(Schedule
             ).filter(Schedule.owner == flask.request.json["user"]
@@ -119,18 +84,18 @@ def node_status():
             ).all()
     # Get the status of the nodes
     for n in nodes:
-        result["nodes"][n.name] = { "name": n.name, "status": n.status, "bin": n.bin }
+        result["nodes"][n.node_name] = { "name": n.node_name, "status": n.status, "bin": n.bin }
         if n.status == "in_progress":
             # An action is in progress, get the state of this action
-            action = db.query(Action.state).filter(Action.node_name == n.name).first()
+            action = db.query(Action.state).filter(Action.node_name == n.node_name).first()
             if action is None or action.state is None or len(action.state) == 0:
-                result["nodes"][n.name]["status"] = n.status
+                result["nodes"][n.node_name]["status"] = n.status
             else:
-                result["nodes"][n.name]["status"] = action.state.replace("_post", "").replace("_exec", "")
+                result["nodes"][n.node_name]["status"] = action.state.replace("_post", "").replace("_exec", "")
         if n.status == "ready":
             # There is no action associated to this node
             if n.action_state is not None and len(n.action_state) > 0:
-                result["nodes"][n.name]["status"] = n.action_state
+                result["nodes"][n.node_name]["status"] = n.action_state
     # Get both the OS password and the environment copy progress of the nodes
     action_props = db.query(ActionProperty
             ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
@@ -145,15 +110,13 @@ def node_status():
 @user_v1.route("/node/prop", methods=["POST"])
 @auth
 def node_prop():
-    db = open_session()
-    # Get the nodes
     result = {}
-    for n in db.query(Node).all():
-        result[n.name] = row2dict(n)
+    db = open_session()
     # Get the node properties
-    for p in db.query(NodeProperty).all():
-        if p.name in result:
-            result[p.name][p.prop_name] = p.prop_value
+    for p in db.query(NodeProperty).filter(NodeProperty.node_name != "pimaster").all():
+        if p.node_name not in result:
+            result[p.node_name] = {}
+        result[p.node_name][p.prop_name] = p.prop_value
     close_session(db)
     return json.dumps(result)
 
@@ -178,11 +141,11 @@ def my_node():
             ).filter(Schedule.status != "configuring"
             ).all()
     for n in nodes:
-        result["nodes"][n.name] = row2dict(n)
-        node_names.append(n.name)
-    props = db.query(NodeProperty).filter(NodeProperty.name.in_(result["nodes"].keys())).all()
+        result["nodes"][n.node_name] = row2dict(n)
+        node_names.append(n.node_name)
+    props = db.query(NodeProperty).filter(NodeProperty.node_name.in_(result["nodes"].keys())).all()
     for p in props:
-        result["nodes"][p.name][p.prop_name] = p.prop_value
+        result["nodes"][p.node_name][p.prop_name] = p.prop_value
     envs = db.query(ActionProperty
         ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
         ).filter(ActionProperty.prop_name.in_(["environment", "os_password"])
@@ -232,35 +195,33 @@ def reserve():
     filtered_nodes = []
     if "name" in f:
         # Node names are unique identifiers
-        node = db.query(Node).filter(Node.name == f["name"]).first()
+        node = db.query(NodeProperty).filter(NodeProperty.node_name == f["name"]).first()
         if node is not None:
-            filtered_nodes.append(node)
+            filtered_nodes.append(node.node_name)
     else:
-        # Get all nodes
-        all_nodes = db.query(Node).all()
         # Get the node properties used in the filter
         node_props = {}
         for prop in db.query(NodeProperty).filter(NodeProperty.prop_name.in_(f.keys())).all():
-            if prop.name not in node_props:
-                node_props[prop.name] = {}
-            node_props[prop.name][prop.prop_name] = prop.prop_value
-        for node in all_nodes:
+            if prop.node_name not in node_props:
+                node_props[prop.node_name] = {}
+            node_props[prop.node_name][prop.prop_name] = prop.prop_value
+        for node_name in node_props:
             ok_filtered = True
             for prop in f:
-                if node_props[node.name][prop] != f[prop]:
+                if node_props[node_name][prop] != f[prop]:
                     ok_filtered = False
             if ok_filtered:
-                filtered_nodes.append(node)
+                filtered_nodes.append(node_name)
     # Check the availability of the filtered nodes
     logging.warning("Filtered nodes: %s" % filtered_nodes)
     selected_nodes = []
-    for node in filtered_nodes:
+    for node_name in filtered_nodes:
         ok_selected = True
         # Move the start date back 15 minutes to give the time for destroying the previous reservation
         minutes_removed = timedelta(minutes = 15)
         back_date = start_date - minutes_removed
         # Check the schedule of the existing reservations
-        for reservation in db.query(Schedule).filter(Schedule.name == node.name).all():
+        for reservation in db.query(Schedule).filter(Schedule.node_name == node_name).all():
             # Only one reservation for a specific node per user
             if reservation.owner == user:
                 ok_selected = False
@@ -269,16 +230,15 @@ def reserve():
                 ok_selected = False
         if ok_selected:
             # Add the node to the reservation
-            selected_nodes.append(node)
+            selected_nodes.append(node_name)
             if len(selected_nodes) == nb_nodes:
                 # Exit when the required number of nodes is reached
                 break;
     logging.warning("Selected nodes: %s" % selected_nodes)
     # Reserve the nodes
-    for node in selected_nodes:
-        result["nodes"].append(node.name)
+    for node_name in selected_nodes:
         res = Schedule()
-        res.name = node.name
+        res.node_name = node_name
         res.owner = user
         res.start_date = start_date
         res.end_date = end_date
@@ -286,6 +246,7 @@ def reserve():
         res.action_state = ""
         db.add(res)
     close_session(db)
+    result["nodes"] = selected_nodes
     return json.dumps(result)
 
 
@@ -315,9 +276,9 @@ def configure():
         if len(conf_prop) == 2:
             node_type = get_config()["node_type"]
             conf_prop.update(get_config()["configure_prop"][node_type])
-        result[n.name] = conf_prop.copy()
-        result[n.name]["start_date"] = n.start_date.strftime(DATE_FORMAT)
-        result[n.name]["end_date"] = n.end_date.strftime(DATE_FORMAT)
+        result[n.node_name] = conf_prop.copy()
+        result[n.node_name]["start_date"] = n.start_date.strftime(DATE_FORMAT)
+        result[n.node_name]["end_date"] = n.end_date.strftime(DATE_FORMAT)
     close_session(db)
     return json.dumps(result)
 
@@ -351,45 +312,45 @@ def deploy():
             ).filter(Schedule.status == "configuring"
             ).all()
     for n in nodes:
-        if n.name in node_prop:
+        if n.node_name in node_prop:
             # Remove special characters from the node bin name
-            safe_value = safe_string(node_prop[n.name].pop("node_bin"))
+            safe_value = safe_string(node_prop[n.node_name].pop("node_bin"))
             # Remove spaces from value
             safe_value = safe_value.replace(" ", "_")
             node_bin = safe_value
-            result[n.name] = {}
+            result[n.node_name] = {}
             # Check required properties
             required = [ prop for prop in conf_prop if conf_prop[prop]["mandatory"] ]
             for prop in required:
-                if prop not in node_prop[n.name]:
-                    if "missing" not in result[n.name]:
-                        result[n.name]["missing"] = [ prop ]
+                if prop not in node_prop[n.node_name]:
+                    if "missing" not in result[n.node_name]:
+                        result[n.node_name]["missing"] = [ prop ]
                     else:
-                        result[n.name]["missing"].append(prop)
-            if len(result[n.name]) == 0:
+                        result[n.node_name]["missing"].append(prop)
+            if len(result[n.node_name]) == 0:
                 # Delete the existing configuration for this node
-                existing = db.query(ActionProperty).filter(ActionProperty.node_name == n.name).all()
+                existing = db.query(ActionProperty).filter(ActionProperty.node_name == n.node_name).all()
                 for to_del in existing:
                     db.delete(to_del)
                 # Write the configuration to the database
-                for prop in node_prop[n.name]:
-                    if len(node_prop[n.name][prop]) > 0:
+                for prop in node_prop[n.node_name]:
+                    if len(node_prop[n.node_name][prop]) > 0:
                         act_prop = ActionProperty()
-                        act_prop.node_name = n.name
+                        act_prop.node_name = n.node_name
                         act_prop.prop_name = prop
                         if "ssh_key" in prop:
-                            act_prop.prop_value = node_prop[n.name][prop]
+                            act_prop.prop_value = node_prop[n.node_name][prop]
                         else:
                             # Remove special characters from value
-                            safe_value = safe_string(node_prop[n.name][prop])
+                            safe_value = safe_string(node_prop[n.node_name][prop])
                             # Remove spaces from value
                             safe_value = safe_value.replace(" ", "_")
                             act_prop.prop_value = safe_value
                         db.add(act_prop)
                 n.status = "ready"
                 n.bin = node_bin
-                logging.info("[%s] change status to 'ready'" % n.name)
-                result[n.name]["status"] = n.status
+                logging.info("[%s] change status to 'ready'" % n.node_name)
+                result[n.node_name]["status"] = n.status
     close_session(db)
     return json.dumps(result)
 
@@ -416,20 +377,20 @@ def destroy():
         db.delete(action)
     # Get the reservations to destroy
     nodes = db.query(Schedule
-            ).filter(Schedule.name.in_(wanted)
+            ).filter(Schedule.node_name.in_(wanted)
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
         if n.status == "configuring":
             # The node is not deployed, delete the reservation and the associated properties
-            free_reserved_node(db, n.name)
-            result[n.name] = "success"
+            free_reserved_node(db, n.node_name)
+            result[n.node_name] = "success"
         else:
             # Create a new action to start the destroy action
             node_action = new_action(n, db)
             init_action_process(node_action, "destroy")
             db.add(node_action)
-            result[n.name] = "success"
+            result[n.node_name] = "success"
     close_session(db)
     # Build the result
     for n in wanted:
@@ -455,7 +416,7 @@ def hardreboot():
     # Get information about the requested nodes
     db = open_session()
     nodes = db.query(Schedule
-            ).filter(Schedule.name.in_(wanted)
+            ).filter(Schedule.node_name.in_(wanted)
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
@@ -465,11 +426,11 @@ def hardreboot():
             save_reboot_state(node_action, db)
             init_action_process(node_action, "reboot")
             db.add(node_action)
-            result[n.name] = "success"
+            result[n.node_name] = "success"
         else:
             logging.error("[%s] can not reboot because the status is not 'ready' (status: %s)" % (
-                n.name, n.status))
-            result[n.name] = "failure: %s is not ready" % n.name
+                n.node_name, n.status))
+            result[n.node_name] = "failure: %s is not ready" % n.node_name
     close_session(db)
     # Build the result
     for n in wanted:
@@ -495,20 +456,20 @@ def deployagain():
     # Get information about the requested nodes
     db = open_session()
     nodes = db.query(Schedule
-            ).filter(Schedule.name.in_(wanted)
+            ).filter(Schedule.node_name.in_(wanted)
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
         if n.status == "ready":
-            node_action = db.query(Action).filter(Action.node_name == n.name).first()
+            node_action = db.query(Action).filter(Action.node_name == n.node_name).first()
             # The deployment is completed, add a new action
             node_action = new_action(n, db)
             # The deployment is completed, add a new action
             init_action_process(node_action, "deploy")
             db.add(node_action)
-            result[n.name] = "success"
+            result[n.node_name] = "success"
         else:
-            result[n.name] = "failure: %s is not ready" % n.name
+            result[n.node_name] = "failure: %s is not ready" % n.node_name
     close_session(db)
     # Build the result
     for n in wanted:

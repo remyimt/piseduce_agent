@@ -1,7 +1,7 @@
 from api.auth import auth
 from api.tool import safe_string, load_environment_names
 from database.connector import open_session, close_session
-from database.tables import Action, ActionProperty, Environment, Node, NodeProperty, Switch 
+from database.tables import Action, ActionProperty, Environment, NodeProperty, Switch 
 from datetime import datetime
 from glob import glob
 from lib.config_loader import get_config
@@ -26,8 +26,8 @@ def new_switch_prop(switch_name, prop_name, prop_value):
 @auth
 def pimaster_node():
     db = open_session()
-    pimaster_ip = db.query(NodeProperty).filter(NodeProperty.name == "pimaster"
-        ).filter(NodeProperty.prop_name == "ip").first().prop_value
+    pimaster_ip = db.query(NodeProperty).filter(NodeProperty.node_name == "pimaster"
+        ).filter(NodeProperty.prop_name == "master_ip").first().prop_value
     close_session(db)
     return json.dumps({ "ip": pimaster_ip })
 
@@ -76,15 +76,15 @@ def rename_nodes():
         error = "can not rename the nodes: actions in progress"
     else:
         # Rename all nodes
-        for node in db.query(Node).all():
+        for node in db.query(Schedule).all():
             # We assume the node name looks like 'base_name-number'
-            current = node.name.split("-")[0]
-            node.name = node.name.replace(current, rename_data["base_name"])
-            nodes.append(node.name)
+            current = node.node_name.split("-")[0]
+            node.name = node.node_name.replace(current, rename_data["base_name"])
+            nodes.append(node.node_name)
         for node in db.query(NodeProperty).all():
             # We assume the node name looks like 'base_name-number'
-            current = node.name.split("-")[0]
-            node.name = node.name.replace(current, rename_data["base_name"])
+            current = node.node_name.split("-")[0]
+            node.name = node.node_name.replace(current, rename_data["base_name"])
         for node in db.query(ActionProperty).all():
             # We assume the node name looks like 'base_name-number'
             current = node.node_name.split("-")[0]
@@ -249,9 +249,9 @@ def switch_nodes(switch_name):
     # Build the node information
     nodes = {}
     for info in node_info:
-        if info.name not in nodes:
-            nodes[info.name] = {}
-        nodes[info.name][info.prop_name] = info.prop_value
+        if info.node_name not in nodes:
+            nodes[info.node_name] = {}
+        nodes[info.node_name][info.prop_name] = info.prop_value
     close_session(db)
     for n in nodes:
         if nodes[n]["switch"] == switch_name:
@@ -471,45 +471,36 @@ def node_conf(switch_name):
         # Write the node information to the database
         if len(node_serial) > 0 and len(node_model) > 0:
             db = open_session()
-            existing = db.query(Node).filter(Node.name == node_name).all()
+            existing = db.query(NodeProperty).filter(NodeProperty.node_name == node_name).all()
             for to_del in existing:
                 db.delete(to_del)
-            existing = db.query(NodeProperty).filter(NodeProperty.name == node_name).all()
-            for to_del in existing:
-                db.delete(to_del)
-            node_db = Node()
-            node_db.name = node_name
-            node_db.ip = node_ip
-            node_db.status = "available"
-            node_db.owner = None
-            db.add(node_db)
             # add 'switch' property
             prop_db = NodeProperty()
-            prop_db.name = node_name
+            prop_db.node_name = node_name
             prop_db.prop_name = "port_number"
             prop_db.prop_value = node_port
             db.add(prop_db)
             # add 'port_number' property
             prop_db = NodeProperty()
-            prop_db.name = node_name
+            prop_db.node_name = node_name
             prop_db.prop_name = "switch"
             prop_db.prop_value = switch_name
             db.add(prop_db)
             # add 'ip' property
             prop_db = NodeProperty()
-            prop_db.name = node_name
+            prop_db.node_name = node_name
             prop_db.prop_name = "ip"
             prop_db.prop_value = node_ip
             db.add(prop_db)
             # add 'model' property
             prop_db = NodeProperty()
-            prop_db.name = node_name
+            prop_db.node_name = node_name
             prop_db.prop_name = "model"
             prop_db.prop_value = node_model
             db.add(prop_db)
             # add 'serial' property
             prop_db = NodeProperty()
-            prop_db.name = node_name
+            prop_db.node_name = node_name
             prop_db.prop_name = "serial"
             prop_db.prop_value = node_serial
             db.add(prop_db)
@@ -559,22 +550,13 @@ def add_node():
     # Check if all properties belong to the POST data
     if len(missing_data) == 0:
         db = open_session()
-        existing = db.query(Node).filter(Node.name == json_data["name"]).all()
+        existing = db.query(NodeProperty).filter(NodeProperty.node_name == json_data["name"]).all()
         for to_del in existing:
             db.delete(to_del)
-        existing = db.query(NodeProperty).filter(NodeProperty.name == json_data["name"]).all()
-        for to_del in existing:
-            db.delete(to_del)
-        node_db = Node()
-        node_db.name = json_data["name"]
-        node_db.ip = json_data["ip"]
-        node_db.status = "available"
-        node_db.owner = None
-        db.add(node_db)
         for prop in node_props:
             if prop != "name":
                 prop_db = NodeProperty()
-                prop_db.name = json_data["name"]
+                prop_db.node_name = json_data["name"]
                 prop_db.prop_name = prop
                 prop_db.prop_value = json_data[prop]
                 db.add(prop_db)
@@ -628,10 +610,7 @@ def delete(el_type):
     if len(missing_data) == 0:
         if el_type == "node":
             db = open_session()
-            existing = db.query(Node).filter(Node.name == data["name"]).all()
-            for to_del in existing:
-                db.delete(to_del)
-            existing = db.query(NodeProperty).filter(NodeProperty.name == data["name"]).all()
+            existing = db.query(NodeProperty).filter(NodeProperty.node_name == data["name"]).all()
             for to_del in existing:
                 db.delete(to_del)
             close_session(db)

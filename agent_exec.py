@@ -8,7 +8,7 @@ if len(sys.argv) != 2:
 load_config(sys.argv[1])
 
 from database.connector import open_session, close_session
-from database.tables import Action, ActionProperty, Node, NodeProperty, Schedule
+from database.tables import Action, ActionProperty, NodeProperty, Schedule
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from lib.config_loader import DATE_FORMAT, load_config
@@ -58,23 +58,23 @@ def next_state_move(db_action):
 
 def new_action(db_node, db):
     # Delete existing actions
-    existing = db.query(Action).filter(Action.node_name == db_node.name).all()
+    existing = db.query(Action).filter(Action.node_name == db_node.node_name).all()
     for e in existing:
         db.delete(e)
     # Get the node IP
     node_ip = db.query(NodeProperty
-        ).filter(NodeProperty.name == db_node.name
+        ).filter(NodeProperty.node_name == db_node.node_name
         ).filter(NodeProperty.prop_name == "ip"
         ).first().prop_value
     # Add a new action
     act = Action()
     act_prop = db.query(ActionProperty
-        ).filter(ActionProperty.node_name == db_node.name
+        ).filter(ActionProperty.node_name == db_node.node_name
         ).filter(ActionProperty.prop_name == "environment"
         ).first()
     if act_prop is not None:
         act.environment = act_prop.prop_value
-    act.node_name = db_node.name
+    act.node_name = db_node.node_name
     act.node_ip = node_ip
     db_node.status = "in_progress"
     return act
@@ -89,7 +89,7 @@ def save_reboot_state(db_action, db):
     if db_action.state_idx is None:
         # This is an hardreboot action initiated by the user, check if the node is deployed
         is_deployed = db.query(Schedule
-            ).filter(Schedule.name == db_action.node_name
+            ).filter(Schedule.node_name == db_action.node_name
             ).filter(Schedule.action_state == "deployed"
             ).first()
         if is_deployed is not None:
@@ -148,7 +148,7 @@ def free_reserved_node(db, node_name):
     for prop in properties:
         db.delete(prop)
     # Delete reservations to the schedule
-    reservations = db.query(Schedule).filter(Schedule.name == node_name).all()
+    reservations = db.query(Schedule).filter(Schedule.node_name == node_name).all()
     for res in reservations:
         db.delete(res)
 
@@ -193,27 +193,27 @@ if __name__ == "__main__":
             if len(my_ip) > 0:
                 my_ip = my_ip[0]
     # Update the pimaster information of the database
-    pimaster_info = db.query(NodeProperty).filter(NodeProperty.name == "pimaster").all()
+    pimaster_info = db.query(NodeProperty).filter(NodeProperty.node_name == "pimaster").all()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
         if pimaster_info is not None and len(pimaster_info) > 0:
             logging.info("Update the pimaster information from existing DB records")
             # Check the pimaster information
             for info in pimaster_info:
-                if info.prop_name == "user" and info.prop_value != my_user:
+                if info.prop_name == "master_user" and info.prop_value != my_user:
                     info.prop_value = my_user
-                if info.prop_name == "ip" and info.prop_value != my_ip:
+                if info.prop_name == "master_ip" and info.prop_value != my_ip:
                     info.prop_value = my_ip
         else:
             # Add the pimaster information in the database
             logging.info("Create new records to register the pimaster information")
             user_record = NodeProperty()
             user_record.name = "pimaster"
-            user_record.prop_name = "user"
+            user_record.prop_name = "master_user"
             user_record.prop_value = my_user
             db.add(user_record)
             ip_record = NodeProperty()
             ip_record.name = "pimaster"
-            ip_record.prop_name = "ip"
+            ip_record.prop_name = "master_ip"
             ip_record.prop_value = my_ip
             db.add(ip_record)
         logging.info("pimaster ip: %s, pimaster user: %s" % (my_ip, my_user))
@@ -225,7 +225,7 @@ if __name__ == "__main__":
         ).filter(Schedule.action_state == "lost"
         ).all()
     for node in lost_nodes:
-        logging.info("[%s] lost node rescue" % node.name)
+        logging.info("[%s] lost node rescue" % node.node_name)
         # Create a new action to continue the deployment
         act = new_action(node, db)
         # Load the reboot_state
@@ -234,7 +234,7 @@ if __name__ == "__main__":
             db.add(act)
             # Delete the reboot_state to allow the node to reboot
             reboot_state = db.query(ActionProperty
-                ).filter(ActionProperty.node_name == node.name
+                ).filter(ActionProperty.node_name == node.node_name
                 ).filter(ActionProperty.prop_name == "reboot_state"
                 ).first()
             if reboot_state is not None:
@@ -252,15 +252,15 @@ if __name__ == "__main__":
             now = datetime.now(timezone.utc)
             now = now.replace(tzinfo = None)
             for node in db.query(Schedule).filter(Schedule.end_date < now).all():
-                logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.name, node.end_date))
+                logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.node_name, node.end_date))
                 # The reservation is expired, delete it
                 if node.status == "configuring":
                     # The node is not deployed
-                    free_reserved_node(db, node.name)
+                    free_reserved_node(db, node.node_name)
                 else:
                     # Check if a destroy action is in progress
                     destroy_action = db.query(Action
-                        ).filter(Action.node_name == node.name
+                        ).filter(Action.node_name == node.node_name
                         ).filter(Action.process == "destroy").all()
                     if len(destroy_action) == 0:
                         node_action = new_action(node, db)
@@ -281,14 +281,14 @@ if __name__ == "__main__":
                 # Update the action_state of the reservation
                 node = db.query(Schedule
                     ).filter(Schedule.status == "in_progress"
-                    ).filter(Schedule.name == action.node_name
+                    ).filter(Schedule.node_name == action.node_name
                     ).first()
                 if node is not None:
                     node.status = "ready"
                     node.action_state = action.state
                     if action.state == "destroyed":
                         # Update the node fields
-                        free_reserved_node(db, node.name)
+                        free_reserved_node(db, node.node_name)
                 # Delete the action
                 db.delete(action)
             # Start actions for the recently configured nodes
@@ -301,7 +301,7 @@ if __name__ == "__main__":
                 ).all()
             if len(pending_nodes) > 0:
                 for node in pending_nodes:
-                    logging.info("[%s] starts the deploy process (start date: %s)" % (node.name, node.start_date))
+                    logging.info("[%s] starts the deploy process (start date: %s)" % (node.node_name, node.start_date))
                     act = new_action(node, db)
                     init_action_process(act, "deploy")
                     db.add(act)
