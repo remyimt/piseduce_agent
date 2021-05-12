@@ -8,7 +8,7 @@ if len(sys.argv) != 2:
 load_config(sys.argv[1])
 
 from database.connector import open_session, close_session
-from database.tables import Action, ActionProperty, NodeProperty, Schedule
+from database.tables import Action, ActionProperty, Node, Schedule
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from lib.config_loader import DATE_FORMAT, load_config
@@ -62,9 +62,9 @@ def new_action(db_node, db):
     for e in existing:
         db.delete(e)
     # Get the node IP
-    node_ip = db.query(NodeProperty
-        ).filter(NodeProperty.node_name == db_node.node_name
-        ).filter(NodeProperty.prop_name == "ip"
+    node_ip = db.query(Node
+        ).filter(Node.node_name == db_node.node_name
+        ).filter(Node.prop_name == "ip"
         ).first().prop_value
     # Add a new action
     act = Action()
@@ -193,7 +193,7 @@ if __name__ == "__main__":
             if len(my_ip) > 0:
                 my_ip = my_ip[0]
     # Update the pimaster information of the database
-    pimaster_info = db.query(NodeProperty).filter(NodeProperty.node_name == "pimaster").all()
+    pimaster_info = db.query(Node).filter(Node.node_name == "pimaster").all()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
         if pimaster_info is not None and len(pimaster_info) > 0:
             logging.info("Update the pimaster information from existing DB records")
@@ -206,12 +206,12 @@ if __name__ == "__main__":
         else:
             # Add the pimaster information in the database
             logging.info("Create new records to register the pimaster information")
-            user_record = NodeProperty()
+            user_record = Node()
             user_record.name = "pimaster"
             user_record.prop_name = "master_user"
             user_record.prop_value = my_user
             db.add(user_record)
-            ip_record = NodeProperty()
+            ip_record = Node()
             ip_record.name = "pimaster"
             ip_record.prop_name = "master_ip"
             ip_record.prop_value = my_ip

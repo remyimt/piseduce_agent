@@ -2,8 +2,8 @@ from database.base import Base
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 
-class NodeProperty(Base):
-    __tablename__ = 'node_prop'
+class Node(Base):
+    __tablename__ = 'node'
     node_name = Column(Text, primary_key=True)
     prop_name = Column(Text, primary_key=True)
     prop_value = Column(Text)

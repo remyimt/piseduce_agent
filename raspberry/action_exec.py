@@ -1,5 +1,5 @@
 from database.connector import row2props
-from database.tables import ActionProperty, NodeProperty, Environment
+from database.tables import ActionProperty, Node, Environment
 from datetime import datetime
 from glob import glob
 from lib.config_loader import DATE_FORMAT, get_config
@@ -30,9 +30,9 @@ def new_password(stringLength=8):
 
 # States of the 'deploy' process (deploy environments)
 def boot_conf_exec(action, db):
-    serial = db.query(NodeProperty
-            ).filter(NodeProperty.node_name  == action.node_name
-            ).filter(NodeProperty.prop_name == "serial").first().prop_value
+    serial = db.query(Node
+            ).filter(Node.node_name  == action.node_name
+            ).filter(Node.prop_name == "serial").first().prop_value
     # Create a folder containing network boot files that will be served via TFTP
     tftpboot_template_folder = "/tftpboot/rpiboot_uboot"
     tftpboot_node_folder = "/tftpboot/%s" % serial
@@ -45,36 +45,36 @@ def boot_conf_exec(action, db):
 
 
 def turn_off_exec(action, db):
-    node_prop = row2props(db.query(NodeProperty
-        ).filter(NodeProperty.node_name  == action.node_name
-        ).filter(NodeProperty.prop_name.in_(["switch", "port_number"])).all())
+    node_prop = row2props(db.query(Node
+        ).filter(Node.node_name  == action.node_name
+        ).filter(Node.prop_name.in_(["switch", "port_number"])).all())
     # Turn off port
     turn_off_port(node_prop["switch"], node_prop["port_number"])
     return True
 
 
 def turn_on_exec(action, db):
-    node_prop = row2props(db.query(NodeProperty
-        ).filter(NodeProperty.node_name  == action.node_name
-        ).filter(NodeProperty.prop_name.in_(["switch", "port_number"])).all())
+    node_prop = row2props(db.query(Node
+        ).filter(Node.node_name  == action.node_name
+        ).filter(Node.prop_name.in_(["switch", "port_number"])).all())
     # Turn on port
     turn_on_port(node_prop["switch"], node_prop["port_number"])
     return True
 
 
 def turn_on_post(action, db):
-    node_ip = db.query(NodeProperty
-            ).filter(NodeProperty.node_name  == action.node_name
-            ).filter(NodeProperty.prop_name == "ip").first().prop_value
+    node_ip = db.query(Node
+            ).filter(Node.node_name  == action.node_name
+            ).filter(Node.prop_name == "ip").first().prop_value
     cmd = "ping -W 1 -c 1 %s" % node_ip
     subproc = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return subproc.returncode == 0
 
 
 def ssh_test_post(action, db):
-    node_ip = db.query(NodeProperty
-            ).filter(NodeProperty.node_name  == action.node_name
-            ).filter(NodeProperty.prop_name == "ip").first().prop_value
+    node_ip = db.query(Node
+            ).filter(Node.node_name  == action.node_name
+            ).filter(Node.prop_name == "ip").first().prop_value
     # By default, we use the ssh_user of the environment. We assume the environment is deployed
     ssh_user = db.query(Environment
         ).filter(Environment.name  == action.environment
@@ -113,10 +113,10 @@ def ssh_test_post(action, db):
 
 def env_copy_exec(action, db):
     env_path = get_config()["env_path"]
-    node_ip = db.query(NodeProperty
-            ).filter(NodeProperty.node_name  == action.node_name
-            ).filter(NodeProperty.prop_name == "ip").first().prop_value
-    pimaster_prop = row2props(db.query(NodeProperty).filter(NodeProperty.node_name  == "pimaster").all())
+    node_ip = db.query(Node
+            ).filter(Node.node_name  == action.node_name
+            ).filter(Node.prop_name == "ip").first().prop_value
+    pimaster_prop = row2props(db.query(Node).filter(Node.node_name  == "pimaster").all())
     env_prop = row2props(db.query(Environment).filter(Environment.name  == action.environment).all())
     try:
         ssh = paramiko.SSHClient()
@@ -442,9 +442,9 @@ def system_conf_exec(action, db):
 
 
 def boot_files_exec(action, db):
-    serial = db.query(NodeProperty
-        ).filter(NodeProperty.node_name  == action.node_name
-        ).filter(NodeProperty.prop_name == "serial"
+    serial = db.query(Node
+        ).filter(Node.node_name  == action.node_name
+        ).filter(Node.prop_name == "serial"
         ).first().prop_value
     # Copy boot files to the tftp directory
     tftpboot_node_folder = "/tftpboot/%s" % serial
@@ -560,9 +560,9 @@ def boot_update_exec(action, db):
         ).filter(Environment.name  == action.environment
         ).filter(Environment.prop_name == "ssh_user"
         ).first().prop_value
-    serial = db.query(NodeProperty
-        ).filter(NodeProperty.node_name  == action.node_name
-        ).filter(NodeProperty.prop_name == "serial"
+    serial = db.query(Node
+        ).filter(Node.node_name  == action.node_name
+        ).filter(Node.prop_name == "serial"
         ).first().prop_value
     # Copy boot files to the tftp directory
     tftpboot_node_folder = "/tftpboot/%s" % serial
@@ -638,9 +638,9 @@ def user_conf_exec(action, db):
 
 # Destroying deployments
 def destroying_exec(action, db):
-    node_prop = row2props(db.query(NodeProperty
-        ).filter(NodeProperty.node_name  == action.node_name
-        ).filter(NodeProperty.prop_name.in_(["model", "serial" ])
+    node_prop = row2props(db.query(Node
+        ).filter(Node.node_name  == action.node_name
+        ).filter(Node.prop_name.in_(["model", "serial" ])
         ).all())
     if action.environment is not None:
         ssh_user_db = db.query(Environment

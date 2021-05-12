@@ -1,7 +1,7 @@
 from api.auth import auth
 from api.tool import safe_string
 from database.connector import open_session, close_session, row2props
-from database.tables import Action, ActionProperty, Environment, NodeProperty, Schedule, Switch
+from database.tables import Action, ActionProperty, Environment, Node, Schedule, Switch
 from datetime import datetime, timedelta
 from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, get_config
@@ -113,7 +113,7 @@ def node_prop():
     result = {}
     db = open_session()
     # Get the node properties
-    for p in db.query(NodeProperty).filter(NodeProperty.node_name != "pimaster").all():
+    for p in db.query(Node).filter(Node.node_name != "pimaster").all():
         if p.node_name not in result:
             result[p.node_name] = {}
         result[p.node_name][p.prop_name] = p.prop_value
@@ -143,7 +143,7 @@ def my_node():
     for n in nodes:
         result["nodes"][n.node_name] = row2dict(n)
         node_names.append(n.node_name)
-    props = db.query(NodeProperty).filter(NodeProperty.node_name.in_(result["nodes"].keys())).all()
+    props = db.query(Node).filter(Node.node_name.in_(result["nodes"].keys())).all()
     for p in props:
         result["nodes"][p.node_name][p.prop_name] = p.prop_value
     envs = db.query(ActionProperty
@@ -195,13 +195,13 @@ def reserve():
     filtered_nodes = []
     if "name" in f:
         # Node names are unique identifiers
-        node = db.query(NodeProperty).filter(NodeProperty.node_name == f["name"]).first()
+        node = db.query(Node).filter(Node.node_name == f["name"]).first()
         if node is not None:
             filtered_nodes.append(node.node_name)
     else:
         # Get the node properties used in the filter
         node_props = {}
-        for prop in db.query(NodeProperty).filter(NodeProperty.prop_name.in_(f.keys())).all():
+        for prop in db.query(Node).filter(Node.prop_name.in_(f.keys())).all():
             if prop.node_name not in node_props:
                 node_props[prop.node_name] = {}
             node_props[prop.node_name][prop.prop_name] = prop.prop_value
