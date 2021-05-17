@@ -235,7 +235,11 @@ def reserve():
     else:
         # Get the node properties used in the filter
         node_props = {}
-        for prop in db.query(Node).filter(Node.prop_name.in_(f.keys())).all():
+        if len(f) == 0:
+            nodes = db.query(Node).all()
+        else:
+            nodes = db.query(Node).filter(Node.prop_name.in_(f.keys())).all()
+        for prop in nodes:
             if prop.node_name not in node_props:
                 node_props[prop.node_name] = {}
             node_props[prop.node_name][prop.prop_name] = prop.prop_value
