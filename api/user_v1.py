@@ -106,6 +106,40 @@ def node_status():
     return json.dumps(result)
 
 
+@user_v1.route("/node/schedule", methods=["POST"])
+@auth
+def node_schedule():
+    if "user" not in flask.request.json or "@" not in flask.request.json["user"]:
+        return json.dumps({ "parameters": "user: 'email@is.fr'" })
+    result = { "nodes": {} }
+    db = open_session()
+    for sch in db.query(Schedule).all():
+        if sch.node_name not in result["nodes"]:
+            result["nodes"][sch.node_name] = {
+                "owner": sch.owner,
+                "start_hour": str(sch.start_date).split()[1],
+                "end_hour": str(sch.end_date).split()[1]
+            }
+        hours_added = 0
+        delta = timedelta(hours = hours_added)
+        while sch.start_date + delta < sch.end_date:
+            new_date = sch.start_date + delta
+            day_str = str(new_date).split()[0]
+            hour_str = str(new_date.hour)
+            if day_str not in result["nodes"][sch.node_name]:
+                result["nodes"][sch.node_name][day_str] = []
+            result["nodes"][sch.node_name][day_str].append(hour_str)
+            hours_added += 1
+            delta = timedelta(hours = hours_added)
+        day_str = str(sch.end_date).split()[0]
+        hour_str = str(sch.end_date.hour)
+        if day_str not in result["nodes"][sch.node_name]:
+            result["nodes"][sch.node_name][day_str] = []
+        result["nodes"][sch.node_name][day_str].append(hour_str)
+    close_session(db)
+    return json.dumps(result)
+
+
 # Get the list of the nodes with their properties
 @user_v1.route("/node/prop", methods=["POST"])
 @auth
@@ -124,9 +158,9 @@ def node_prop():
 @user_v1.route("/node/mine", methods=["POST"])
 @auth
 def my_node():
-    result = {"states": [], "nodes": {}}
     if "user" not in flask.request.json or "@" not in flask.request.json["user"]:
         return json.dumps({ "parameters": "user: 'email@is.fr'" })
+    result = {"states": [], "nodes": {}}
     # Get the list of the states for the 'deploy' process
     py_module = import_module("%s.states" % get_config()["node_type"])
     PROCESS = getattr(py_module, "PROCESS")
