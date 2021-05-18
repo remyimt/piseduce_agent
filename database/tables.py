@@ -47,7 +47,7 @@ class ActionProperty(Base):
     node_name = Column(Text, primary_key=True)
     prop_name = Column(Text, primary_key=True)
     prop_value = Column(Text)
-    owner = Column(Text)
+    owner = Column(Text, primary_key=True)
 
 
 class Schedule(Base):
