@@ -115,11 +115,15 @@ def node_schedule():
     db = open_session()
     for sch in db.query(Schedule).all():
         if sch.node_name not in result["nodes"]:
+            result["nodes"][sch.node_name] = {}
+        """
+        if sch.node_name not in result["nodes"]:
             result["nodes"][sch.node_name] = {
                 "owner": sch.owner,
                 "start_hour": str(sch.start_date).split()[1],
                 "end_hour": str(sch.end_date).split()[1]
             }
+        """
         hours_added = 0
         delta = timedelta(hours = hours_added)
         while sch.start_date + delta < sch.end_date:
@@ -127,15 +131,29 @@ def node_schedule():
             day_str = str(new_date).split()[0]
             hour_str = str(new_date.hour)
             if day_str not in result["nodes"][sch.node_name]:
-                result["nodes"][sch.node_name][day_str] = []
-            result["nodes"][sch.node_name][day_str].append(hour_str)
+                result["nodes"][sch.node_name][day_str] = {}
+            if sch.owner not in result["nodes"][sch.node_name][day_str]:
+                result["nodes"][sch.node_name][day_str][sch.owner] = {
+                    "hours": [],
+                    "owner": sch.owner,
+                    "start_hour": str(sch.start_date).split()[1],
+                    "end_hour": str(sch.end_date).split()[1]
+                }
+            result["nodes"][sch.node_name][day_str][sch.owner]["hours"].append(hour_str)
             hours_added += 1
             delta = timedelta(hours = hours_added)
         day_str = str(sch.end_date).split()[0]
         hour_str = str(sch.end_date.hour)
         if day_str not in result["nodes"][sch.node_name]:
             result["nodes"][sch.node_name][day_str] = []
-        result["nodes"][sch.node_name][day_str].append(hour_str)
+        if sch.owner not in result["nodes"][sch.node_name][day_str]:
+            result["nodes"][sch.node_name][day_str][sch.owner] = {
+                "hours": [],
+                "owner": sch.owner,
+                "start_hour": str(sch.start_date).split()[1],
+                "end_hour": str(sch.end_date).split()[1]
+            }
+        result["nodes"][sch.node_name][day_str][sch.owner]["hours"].append(hour_str)
     close_session(db)
     return json.dumps(result)
 
@@ -264,7 +282,8 @@ def reserve():
             if reservation.owner == user:
                 ok_selected = False
             # There is a reservation at the same date
-            if back_date > reservation.end_date and end_date > reservation.start_date:
+            if (back_date > reservation.start_date and back_date < reservation.end_date) or (
+                back_date < reservation.start_date and end_date > reservation.start_date):
                 ok_selected = False
         if ok_selected:
             # Add the node to the reservation
