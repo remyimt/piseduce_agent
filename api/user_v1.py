@@ -141,7 +141,7 @@ def node_schedule():
 
 
 # Get the list of the nodes with their properties
-@user_v1.route("/node/prop", methods=["POST"])
+@user_v1.route("/node/list", methods=["POST"])
 @auth
 def node_prop():
     result = {}
