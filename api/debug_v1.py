@@ -7,9 +7,9 @@ import json
 debug_v1 = Blueprint("debug_v1", __name__)
 
 
-@debug_v1.route("/status")
+@debug_v1.route("/state")
 def status():
-    return json.dumps({"status": "running", "type": get_config()["node_type"] })
+    return json.dumps({"state": "running", "type": get_config()["node_type"] })
 
 
 @debug_v1.route("/auth", methods=["POST"])
