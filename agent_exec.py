@@ -76,7 +76,7 @@ def new_action(db_node, db):
         act.environment = act_prop.prop_value
     act.node_name = db_node.node_name
     act.node_ip = node_ip
-    db_node.status = "in_progress"
+    db_node.state = "in_progress"
     return act
 
 
@@ -101,10 +101,14 @@ def save_reboot_state(db_action, db):
     if len(reboot_str) > 0:
         # Remember the last state of the current process
         if reboot_state is None:
+            owner_email = db.query(ActionProperty
+                ).filter(ActionProperty.node_name == db_action.node_name
+                ).first().owner
             reboot_prop = ActionProperty()
             reboot_prop.node_name = db_action.node_name
             reboot_prop.prop_name = "reboot_state"
             reboot_prop.prop_value = reboot_str
+            reboot_prop.owner = owner_email
             db.add(reboot_prop)
         else:
             reboot_state.prop_value = reboot_str
@@ -241,7 +245,7 @@ if __name__ == "__main__":
                 reboot_state.prop_value = None
         else:
             # The reboot action can not be executed
-            node.status = "ready"
+            node.state = "ready"
 
     close_session(db)
     # Analyzing the database
@@ -254,7 +258,7 @@ if __name__ == "__main__":
             for node in db.query(Schedule).filter(Schedule.end_date < now).all():
                 logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.node_name, node.end_date))
                 # The reservation is expired, delete it
-                if node.status == "configuring":
+                if node.state == "configuring":
                     # The node is not deployed
                     free_reserved_node(db, node.node_name)
                 else:
@@ -280,11 +284,11 @@ if __name__ == "__main__":
                     action.node_name, action.state))
                 # Update the action_state of the reservation
                 node = db.query(Schedule
-                    ).filter(Schedule.status == "in_progress"
+                    ).filter(Schedule.state == "in_progress"
                     ).filter(Schedule.node_name == action.node_name
                     ).first()
                 if node is not None:
-                    node.status = "ready"
+                    node.state = "ready"
                     node.action_state = action.state
                     if action.state == "destroyed":
                         # Update the node fields
@@ -295,7 +299,7 @@ if __name__ == "__main__":
             now = datetime.now(timezone.utc)
             now = now.replace(tzinfo = None)
             pending_nodes = db.query(Schedule
-                ).filter(Schedule.status == "ready"
+                ).filter(Schedule.state == "ready"
                 ).filter(Schedule.action_state == ""
                 ).filter(Schedule.start_date < now
                 ).all()

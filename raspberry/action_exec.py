@@ -136,10 +136,14 @@ def env_copy_exec(action, db):
             ).filter(ActionProperty.node_name == action.node_name
             ).filter(ActionProperty.prop_name == "percent").first()
         if act_prop is None:
+            owner_email = db.query(ActionProperty
+                ).filter(ActionProperty.node_name == action.node_name
+                ).first().owner
             act_prop = ActionProperty()
             act_prop.node_name = action.node_name
             act_prop.prop_name = "percent"
             act_prop.prop_value = 0
+            act_prop.owner = owner_email
             db.add(act_prop)
         else:
             act_prop.prop_value = 0
@@ -374,10 +378,14 @@ def system_conf_exec(action, db):
     if pwd is None:
         # Generate the password
         os_password = new_password()
+        owner_email = db.query(ActionProperty
+            ).filter(ActionProperty.node_name == action.node_name
+            ).first().owner
         act_prop = ActionProperty()
         act_prop.node_name = action.node_name
         act_prop.prop_name = "os_password"
         act_prop.prop_value = os_password
+        act_prop.owner = owner_email
         db.add(act_prop)
     else:
         os_password = pwd.prop_value

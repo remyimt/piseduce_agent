@@ -69,9 +69,9 @@ def list_environment():
     return json.dumps(result)
 
 
-@user_v1.route("/node/status", methods=["POST"])
+@user_v1.route("/node/state", methods=["POST"])
 @auth
-def node_status():
+def node_state():
     result = { "nodes": {} }
     db = open_session()
     nodes = []
@@ -80,22 +80,22 @@ def node_status():
     elif "user" in flask.request.json:
         nodes = db.query(Schedule
             ).filter(Schedule.owner == flask.request.json["user"]
-            ).filter(Schedule.status != "configuring"
+            ).filter(Schedule.state != "configuring"
             ).all()
-    # Get the status of the nodes
+    # Get the state of the nodes
     for n in nodes:
-        result["nodes"][n.node_name] = { "name": n.node_name, "status": n.status, "bin": n.bin }
-        if n.status == "in_progress":
+        result["nodes"][n.node_name] = { "name": n.node_name, "state": n.state, "bin": n.bin }
+        if n.state == "in_progress":
             # An action is in progress, get the state of this action
             action = db.query(Action.state).filter(Action.node_name == n.node_name).first()
             if action is None or action.state is None or len(action.state) == 0:
-                result["nodes"][n.node_name]["status"] = n.status
+                result["nodes"][n.node_name]["state"] = n.state
             else:
-                result["nodes"][n.node_name]["status"] = action.state.replace("_post", "").replace("_exec", "")
-        if n.status == "ready":
+                result["nodes"][n.node_name]["state"] = action.state.replace("_post", "").replace("_exec", "")
+        if n.state == "ready":
             # There is no action associated to this node
             if n.action_state is not None and len(n.action_state) > 0:
-                result["nodes"][n.node_name]["status"] = n.action_state
+                result["nodes"][n.node_name]["state"] = n.action_state
     # Get both the OS password and the environment copy progress of the nodes
     action_props = db.query(ActionProperty
             ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
@@ -172,7 +172,7 @@ def my_node():
     node_names = []
     nodes = db.query(Schedule
             ).filter(Schedule.owner == flask.request.json["user"]
-            ).filter(Schedule.status != "configuring"
+            ).filter(Schedule.state != "configuring"
             ).all()
     for n in nodes:
         result["nodes"][n.node_name] = row2dict(n)
@@ -280,7 +280,7 @@ def reserve():
         res.owner = user
         res.start_date = start_date
         res.end_date = end_date
-        res.status = "configuring"
+        res.state = "configuring"
         res.action_state = ""
         db.add(res)
     close_session(db)
@@ -308,7 +308,7 @@ def configure():
     # Get the nodes in the 'configuring' state
     nodes = db.query(Schedule
             ).filter(Schedule.owner == flask.request.json["user"]
-            ).filter(Schedule.status == "configuring"
+            ).filter(Schedule.state == "configuring"
             ).all()
     for n in nodes:
         if len(conf_prop) == 2:
@@ -332,6 +332,7 @@ def deploy():
         return json.dumps(error_msg)
     # Check the nodes dictionnary
     node_prop = flask.request.json["nodes"]
+    user_email = flask.request.json["user"]
     if isinstance(node_prop, dict):
         for val in node_prop.values():
             if not isinstance(val, dict):
@@ -341,13 +342,13 @@ def deploy():
     # Get the list of properties for the configuration
     node_type = get_config()["node_type"]
     conf_prop = get_config()["configure_prop"][node_type]
-    # Get the node with the 'configuring' status
+    # Get the node with the 'configuring' state
     result = {}
     db = open_session()
     # Search the nodes to deploy in the schedule table (nodes in 'configuring' state)
     nodes = db.query(Schedule
-            ).filter(Schedule.owner == flask.request.json["user"]
-            ).filter(Schedule.status == "configuring"
+            ).filter(Schedule.owner == user_email
+            ).filter(Schedule.state == "configuring"
             ).all()
     for n in nodes:
         if n.node_name in node_prop:
@@ -376,6 +377,7 @@ def deploy():
                         act_prop = ActionProperty()
                         act_prop.node_name = n.node_name
                         act_prop.prop_name = prop
+                        act_prop.owner = user_email
                         if "ssh_key" in prop:
                             act_prop.prop_value = node_prop[n.node_name][prop]
                         else:
@@ -385,10 +387,10 @@ def deploy():
                             safe_value = safe_value.replace(" ", "_")
                             act_prop.prop_value = safe_value
                         db.add(act_prop)
-                n.status = "ready"
+                n.state = "ready"
                 n.bin = node_bin
-                logging.info("[%s] change status to 'ready'" % n.node_name)
-                result[n.node_name]["status"] = n.status
+                logging.info("[%s] change state to 'ready'" % n.node_name)
+                result[n.node_name]["state"] = n.state
     close_session(db)
     return json.dumps(result)
 
@@ -419,7 +421,7 @@ def destroy():
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
-        if n.status == "configuring":
+        if n.state == "configuring":
             # The node is not deployed, delete the reservation and the associated properties
             free_reserved_node(db, n.node_name)
             result[n.node_name] = "success"
@@ -458,7 +460,7 @@ def hardreboot():
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
-        if n.status == "ready":
+        if n.state == "ready":
             # The deployment is completed, add a new action
             node_action = new_action(n, db)
             save_reboot_state(node_action, db)
@@ -466,8 +468,8 @@ def hardreboot():
             db.add(node_action)
             result[n.node_name] = "success"
         else:
-            logging.error("[%s] can not reboot because the status is not 'ready' (status: %s)" % (
-                n.node_name, n.status))
+            logging.error("[%s] can not reboot because the state is not 'ready' (state: %s)" % (
+                n.node_name, n.state))
             result[n.node_name] = "failure: %s is not ready" % n.node_name
     close_session(db)
     # Build the result
@@ -498,7 +500,7 @@ def deployagain():
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
-        if n.status == "ready":
+        if n.state == "ready":
             node_action = db.query(Action).filter(Action.node_name == n.node_name).first()
             # The deployment is completed, add a new action
             node_action = new_action(n, db)

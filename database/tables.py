@@ -57,9 +57,9 @@ class Schedule(Base):
     bin = Column(Text)
     start_date = Column(DateTime)
     end_date = Column(DateTime)
-    status = Column(Text)
+    state = Column(Text)
     action_state = Column(Text)
 
 
     def __repr__(self):
-        return "schedule(%s, %s, %s)" % (self.node_name, self.status, self.start_date)
+        return "schedule(%s, %s, %s)" % (self.node_name, self.state, self.start_date)
