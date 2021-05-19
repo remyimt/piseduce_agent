@@ -2,7 +2,7 @@ from api.auth import auth
 from api.tool import safe_string
 from database.connector import open_session, close_session, row2props
 from database.tables import Action, ActionProperty, Environment, Node, Schedule, Switch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint
 from lib.config_loader import DATE_FORMAT, get_config
 from importlib import import_module
@@ -529,6 +529,47 @@ def deployagain():
             result[n.node_name] = "success"
         else:
             result[n.node_name] = "failure: %s is not ready" % n.node_name
+    close_session(db)
+    # Build the result
+    for n in wanted:
+        if n not in result:
+            result[n] = "failure"
+    return json.dumps(result)
+
+
+# Increase the duration of existing reservations
+@user_v1.route("/extend", methods=["POST"])
+@auth
+def extend():
+    result = {}
+    # Check POST data
+    if "nodes" not in flask.request.json or \
+        "user" not in flask.request.json:
+        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
+    wanted = flask.request.json["nodes"]
+    user = flask.request.json["user"]
+    if len(user) == 0 or '@' not in  user:
+        for n in wanted:
+            result[n] = "no_email"
+        return json.dumps(result)
+    # Get the current date
+    now = datetime.now(timezone.utc)
+    now = now.replace(tzinfo = None)
+    # Get information about the requested nodes
+    db = open_session()
+    nodes = db.query(Schedule
+            ).filter(Schedule.node_name.in_(wanted)
+            ).filter(Schedule.owner == user
+            ).all()
+    for n in nodes:
+        if (n.end_date - now).total_seconds() < 3600:
+            if (n.end_date - n.start_date).days > 4:
+                result[n.node_name] = "failure: the maximum duration of the reservation is reached"
+            else:
+                n.end_date += n.end_date - n.start_date
+                result[n.node_name] = "success"
+        else:
+            result[n.node_name] = "failure: it is too early to extend the reservation"
     close_session(db)
     # Build the result
     for n in wanted:
