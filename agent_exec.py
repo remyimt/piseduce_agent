@@ -211,12 +211,12 @@ if __name__ == "__main__":
             # Add the pimaster information in the database
             logging.info("Create new records to register the pimaster information")
             user_record = Node()
-            user_record.name = "pimaster"
+            user_record.node_name = "pimaster"
             user_record.prop_name = "master_user"
             user_record.prop_value = my_user
             db.add(user_record)
             ip_record = Node()
-            ip_record.name = "pimaster"
+            ip_record.node_name = "pimaster"
             ip_record.prop_name = "master_ip"
             ip_record.prop_value = my_ip
             db.add(ip_record)
