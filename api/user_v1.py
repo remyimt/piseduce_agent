@@ -563,11 +563,11 @@ def extend():
             ).all()
     for n in nodes:
         if (n.end_date - now).total_seconds() < 3600:
-            if (n.end_date - n.start_date).days > 4:
-                result[n.node_name] = "failure: the maximum duration of the reservation is reached"
-            else:
-                n.end_date += n.end_date - n.start_date
-                result[n.node_name] = "success"
+            new_end_date = n.end_date + (n.end_date - n.start_date)
+            if (new_end_date - n.start_date).days > 7:
+                new_end_date = n.start_date + timedelta(days=7)
+            n.end_date = new_end_date
+            result[n.node_name] = "success"
         else:
             result[n.node_name] = "failure: it is too early to extend the reservation"
     close_session(db)
