@@ -76,7 +76,10 @@ def node_state():
     db = open_session()
     nodes = []
     if "nodes" in flask.request.json:
-        nodes = db.query(Schedule).filter(Schedule.node_name.in_(flask.request.json["nodes"])).all()
+        nodes = db.query(Schedule
+            ).filter(Schedule.node_name.in_(flask.request.json["nodes"])
+            ).filter(Schedule.state != "configuring"
+            ).all()
     elif "user" in flask.request.json:
         nodes = db.query(Schedule
             ).filter(Schedule.owner == flask.request.json["user"]
@@ -109,21 +112,11 @@ def node_state():
 @user_v1.route("/node/schedule", methods=["POST"])
 @auth
 def node_schedule():
-    if "user" not in flask.request.json or "@" not in flask.request.json["user"]:
-        return json.dumps({ "parameters": "user: 'email@is.fr'" })
     result = { "nodes": {} }
     db = open_session()
     for sch in db.query(Schedule).all():
         if sch.node_name not in result["nodes"]:
             result["nodes"][sch.node_name] = {}
-        """
-        if sch.node_name not in result["nodes"]:
-            result["nodes"][sch.node_name] = {
-                "owner": sch.owner,
-                "start_hour": str(sch.start_date).split()[1],
-                "end_hour": str(sch.end_date).split()[1]
-            }
-        """
         hours_added = 0
         delta = timedelta(hours = hours_added)
         while sch.start_date + delta < sch.end_date:

@@ -8,7 +8,7 @@ debug_v1 = Blueprint("debug_v1", __name__)
 
 
 @debug_v1.route("/state")
-def status():
+def state():
     return json.dumps({"state": "running", "type": get_config()["node_type"] })
 
 

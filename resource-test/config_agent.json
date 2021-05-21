@@ -1,0 +1,52 @@
+{
+    "auth_token": [ "123456789" ],
+    "port_number": 1234,
+    "node_type": "raspberry",
+    "db_url": "sqlite:///resource-test/test-agent.db",
+    "comments": "Do not forget the ending '/' at the end of the env_path",
+    "env_path": "/root/usb_envs/",
+    "comments": "Required properties to add DHCP clients in the dnsmasq configuration",
+    "client_prop": [
+        "name", "ip", "mac_address" 
+    ],
+    "comments": "Required properties to add switches",
+    "switch_prop": [
+        "name", "ip", "community", "master_port", "oid_first_port" 
+    ],
+    "comments": "Required properties to add environments",
+    "env_prop": [
+        "name", "desc", "img_name", "img_size", "sector_start", "ssh_user", "web"
+    ],
+    "comments": "Common required properties to add nodes",
+    "node_prop": [
+        "name", "ip"
+    ],
+    "comments": "Required properties to add nodes according to the agent type",
+    "fake_prop": [
+        "fakeP1", "fakeP2"
+    ],
+    "raspberry_prop": [
+        "port_number", "switch", "model", "serial"
+    ],
+    "comments": "Configuration of the properties used to add nodes",
+    "configure_prop": {
+        "fake": {
+            "prop1": { "values": [ "value1", "value2", "value3" ], "mandatory": true },
+            "prop2": { "values": [], "mandatory": true },
+            "option": { "values": [], "mandatory": false }
+        },
+        "raspberry": {
+            "update_os": { "values": [ "no", "yes" ], "mandatory": true },
+            "part_size": { "values": [ "whole", "2gb", "5gb", "10gb" ], "mandatory": true },
+            "os_password": { "values": [], "mandatory": false },
+            "form_ssh_key": { "values": [], "mandatory": false }
+        },
+        "sensor": {
+            "os": { "values": [], "mandatory": true }
+        },
+        "server": {
+            "site": { "values": [], "mandatory": true }, 
+            "os": { "values": [], "mandatory": true }
+        }
+    }
+}
