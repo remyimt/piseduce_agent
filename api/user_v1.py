@@ -390,7 +390,7 @@ def deploy():
                         act_prop.node_name = n.node_name
                         act_prop.prop_name = prop
                         act_prop.owner = user_email
-                        if "ssh_key" in prop:
+                        if "ssh_key" in prop or "os_password" == prop:
                             act_prop.prop_value = node_prop[n.node_name][prop]
                         else:
                             # Remove special characters from value
