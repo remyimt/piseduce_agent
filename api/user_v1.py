@@ -555,7 +555,8 @@ def extend():
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
-        if (n.end_date - now).total_seconds() < 3600:
+        # Allow users to extend their reservation 4 hours before the end_date
+        if (n.end_date - now).total_seconds() < 4 * 3600:
             new_end_date = n.end_date + (n.end_date - n.start_date)
             if (new_end_date - n.start_date).days > 7:
                 new_end_date = n.start_date + timedelta(days=7)
