@@ -19,7 +19,7 @@ import logging, os, subprocess, sys, time
 # Import the action driver from config_agent.json
 node_type = get_config()["node_type"]
 # Import the action executor module
-exec_action_mod = import_module("%s.action_exec" % node_type)
+exec_action_mod = import_module("%s.exec" % node_type)
 # Import the PROCESS and STATE_DESC variables
 py_module = import_module("%s.states" % node_type)
 PROCESS = getattr(py_module, "PROCESS")

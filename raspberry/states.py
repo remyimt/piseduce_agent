@@ -1,6 +1,6 @@
 # The index of the last state executed from the NFS filesystem
 # After this state, we use the environment property 'ssh_user' to define the user account to use in SSH connections
-# See raspberry.action_exec.ssh_test()
+# See raspberry.exec.ssh_test()
 SSH_IDX = 12
 
 # Add the environment names to the 'environments' array to limit the process to specific environments
