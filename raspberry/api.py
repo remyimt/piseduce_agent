@@ -4,7 +4,7 @@ from database.tables import Action, ActionProperty, Environment, Node, Schedule,
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from lib.config_loader import DATE_FORMAT, get_config
-from sqlalchemy import inspect, and_, or_
+from sqlalchemy import distinct, inspect, and_, or_
 from agent_exec import free_reserved_node, new_action, init_action_process, save_reboot_state
 import json, logging
 
@@ -16,6 +16,15 @@ def row2dict(alchemyResult):
         else:
             result[c.key] = getattr(alchemyResult, c.key)
     return result
+
+
+# Add the environments to the configuration
+def load_environments():
+    db = open_session()
+    env_names = [name[0] for name in db.query(distinct(Environment.name)).all()]
+    close_session(db)
+    config = get_config()
+    config["configure_prop"][config["node_type"]]["environment"] = { "values": env_names, "mandatory": True }
 
 
 def client_list(arg_dict):

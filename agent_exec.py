@@ -65,7 +65,7 @@ def new_action(db_node, db):
     node_ip = db.query(Node
         ).filter(Node.node_name == db_node.node_name
         ).filter(Node.prop_name == "ip"
-        ).first().prop_value
+        ).first()
     # Add a new action
     act = Action()
     act_prop = db.query(ActionProperty
@@ -75,7 +75,8 @@ def new_action(db_node, db):
     if act_prop is not None:
         act.environment = act_prop.prop_value
     act.node_name = db_node.node_name
-    act.node_ip = node_ip
+    if node_ip is not None:
+        act.node_ip = node_ip.prop_value
     db_node.state = "in_progress"
     return act
 

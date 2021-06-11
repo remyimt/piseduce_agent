@@ -173,6 +173,60 @@ def node_mine():
     The nodes in the 'configuring' state are excluded!
     JSON parameters: user.
     Example of return value:
+    {
+        "states": [
+            "boot_conf",
+            "turn_off",
+            "turn_on",
+            "ssh_test",
+            "env_copy",
+            "env_check",
+            "delete_partition",
+            "create_partition",
+            "mount_partition",
+            "resize_partition",
+            "wait_resizing",
+            "system_conf",
+            "boot_files",
+            "ssh_test",
+            "system_update",
+            "boot_update",
+            "user_conf",
+            "deployed"
+        ],
+        "nodes": {
+            "node-1": {
+                "node_name": "node-1",
+                "owner": "admin@piseduce.fr",
+                "bin": "test",
+                "start_date": "2021-06-04 09:43:00",
+                "end_date": "2021-06-04 11:43:00",
+                "state": "ready",
+                "action_state": "",
+                "ip": "4.4.4.1",
+                "model": "RPI3B+1G",
+                "port_number": "3",
+                "serial": "abcdef1",
+                "switch": "24port_RPI3",
+                "environment": "raspbian_buster_32bit"
+            },
+            "node-3": {
+                "node_name": "node-3",
+                "owner": "admin@piseduce.fr",
+                "bin": "test",
+                "start_date": "2021-06-04 09:43:00",
+                "end_date": "2021-06-04 11:43:00",
+                "state": "ready",
+                "action_state": "",
+                "ip": "4.4.4.3",
+                "model": "RPI3B+1G",
+                "port_number": "5",
+                "serial": "abcdef3",
+                "switch": "24port_RPI3",
+                "environment": "raspbian_buster_32bit"
+            }
+        }
+    }
     """
     return getattr(api_exec_mod, "node_mine")(flask.request.json)
 

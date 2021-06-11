@@ -1,5 +1,5 @@
 from api.auth import auth
-from api.tool import safe_string, load_environment_names
+from api.tool import safe_string
 from database.connector import open_session, close_session
 from database.tables import Action, ActionProperty, Environment, Node, Switch 
 from datetime import datetime
@@ -594,7 +594,7 @@ def add_environment():
                     env_db.prop_value = env_data[prop]
                     db.add(env_db)
         close_session(db)
-        load_environment_names()
+        #TODO Reload the list of the environment from the DB
         return { "environment": env_data["name"] }
     else:
         return {"missing": missing_data }
