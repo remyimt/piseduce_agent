@@ -10,6 +10,7 @@ user_v1 = Blueprint("user_v1", __name__)
 node_type = get_config()["node_type"]
 api_exec_mod = import_module("%s.api" % node_type)
 
+
 # List the DHCP clients (only used by administrators but the URL must be in /user/)
 @user_v1.route("/client/list", methods=["POST"])
 @auth
@@ -95,6 +96,7 @@ def node_state():
     }
     """
     return getattr(api_exec_mod, "node_state")(flask.request.json)
+
 
 @user_v1.route("/node/schedule", methods=["POST"])
 @auth
@@ -230,6 +232,7 @@ def node_mine():
     """
     return getattr(api_exec_mod, "node_mine")(flask.request.json)
 
+
 ## Actions
 @user_v1.route("/reserve", methods=["POST"])
 @auth
@@ -363,4 +366,4 @@ def extend():
         "node-2": "success"
     }
     """
-    return getattr(api_exec_mod, "node_deployagain")(flask.request.json)
+    return getattr(api_exec_mod, "node_extend")(flask.request.json)

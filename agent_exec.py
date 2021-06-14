@@ -8,10 +8,10 @@ if len(sys.argv) != 2:
 load_config(sys.argv[1])
 
 from database.connector import open_session, close_session
-from database.tables import Action, ActionProperty, Node, Schedule
-from datetime import datetime, timedelta, timezone
+from database.tables import Action, ActionProperty, RaspNode, Schedule
+from datetime import datetime
 from importlib import import_module
-from lib.config_loader import DATE_FORMAT, load_config
+from lib.config_loader import load_config
 from sqlalchemy import or_
 import logging, os, subprocess, sys, time
 
@@ -51,7 +51,7 @@ def next_state_move(db_action):
             return False
     # Set the state of the action to the next state of the process
     db_action.state = state_list[db_action.state_idx]
-    db_action.updated_at = datetime.now(timezone.utc)
+    db_action.updated_at = int(time.time())
     logging.info("[%s] changes to the '%s' state" % (db_action.node_name, db_action.state))
     return True
 
@@ -62,9 +62,9 @@ def new_action(db_node, db):
     for e in existing:
         db.delete(e)
     # Get the node IP
-    node_ip = db.query(Node
-        ).filter(Node.node_name == db_node.node_name
-        ).filter(Node.prop_name == "ip"
+    node_ip = db.query(RaspNode
+        ).filter(RaspNode.node_name == db_node.node_name
+        ).filter(RaspNode.prop_name == "ip"
         ).first()
     # Add a new action
     act = Action()
@@ -198,7 +198,7 @@ if __name__ == "__main__":
             if len(my_ip) > 0:
                 my_ip = my_ip[0]
     # Update the pimaster information of the database
-    pimaster_info = db.query(Node).filter(Node.node_name == "pimaster").all()
+    pimaster_info = db.query(RaspNode).filter(RaspNode.node_name == "pimaster").all()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
         if pimaster_info is not None and len(pimaster_info) > 0:
             logging.info("Update the pimaster information from existing DB records")
@@ -211,12 +211,12 @@ if __name__ == "__main__":
         else:
             # Add the pimaster information in the database
             logging.info("Create new records to register the pimaster information")
-            user_record = Node()
+            user_record = RaspNode()
             user_record.node_name = "pimaster"
             user_record.prop_name = "master_user"
             user_record.prop_value = my_user
             db.add(user_record)
-            ip_record = Node()
+            ip_record = RaspNode()
             ip_record.node_name = "pimaster"
             ip_record.prop_name = "master_ip"
             ip_record.prop_value = my_ip
@@ -254,10 +254,10 @@ if __name__ == "__main__":
         db = open_session()
         try:
             # Release the expired nodes
-            now = datetime.now(timezone.utc)
-            now = now.replace(tzinfo = None)
+            now = int(time.time())
             for node in db.query(Schedule).filter(Schedule.end_date < now).all():
-                logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (node.node_name, node.end_date))
+                logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (
+                    node.node_name, datetime.fromtimestamp(node.end_date)))
                 # The reservation is expired, delete it
                 if node.state == "configuring":
                     # The node is not deployed
@@ -297,8 +297,7 @@ if __name__ == "__main__":
                 # Delete the action
                 db.delete(action)
             # Start actions for the recently configured nodes
-            now = datetime.now(timezone.utc)
-            now = now.replace(tzinfo = None)
+            now = int(time.time())
             pending_nodes = db.query(Schedule
                 ).filter(Schedule.state == "ready"
                 ).filter(Schedule.action_state == ""
@@ -306,7 +305,8 @@ if __name__ == "__main__":
                 ).all()
             if len(pending_nodes) > 0:
                 for node in pending_nodes:
-                    logging.info("[%s] starts the deploy process (start date: %s)" % (node.node_name, node.start_date))
+                    logging.info("[%s] starts the deploy process (start date: %s)" % (
+                        node.node_name, datetime.fromtimestamp(node.start_date)))
                     act = new_action(node, db)
                     init_action_process(act, "deploy")
                     db.add(act)
@@ -350,10 +350,8 @@ if __name__ == "__main__":
                         # The node is not ready, test the reboot timeout
                         logging.warning("[%s] fails to execute '%s'" % (action.node_name, state_fct))
                         if action.updated_at is None:
-                            action.updated_at = datetime.now(timezone.utc)
-                        now = datetime.now(timezone.utc)
-                        now = now.replace(tzinfo = None)
-                        elapsedTime = (now - action.updated_at).total_seconds()
+                            action.updated_at = int(time.time())
+                        elapsedTime = now - action.updated_at
                         action_state = action.state.replace("_exec", "").replace("_post","")
                         reboot_timeout = STATE_DESC[action_state]["before_reboot"]
                         do_lost = True

@@ -1,13 +1,12 @@
 from api.tool import safe_string
-from database.connector import open_session, close_session, row2props
-from database.tables import Action, ActionProperty, Environment, Node, Schedule, Switch
+from database.connector import open_session, close_session
+from database.tables import Action, ActionProperty, Schedule
 from datetime import datetime, timedelta, timezone
 from grid5000 import Grid5000
 from importlib import import_module
-from lib.config_loader import DATE_FORMAT, get_config
-from sqlalchemy import inspect, and_, or_
+from lib.config_loader import get_config
 from agent_exec import free_reserved_node, new_action, init_action_process, save_reboot_state
-import json, logging, os, pytz, time
+import json, logging, os, pytz, requests, time
 
 
 G5K_SITE = Grid5000(
@@ -48,7 +47,7 @@ def delete_job(db_job, db):
 
 def build_server_list():
     # The file to build the server list without querying the grid5000 API
-    server_file = "g5k-servers.json"
+    server_file = "node-g5k.json"
     # Get all nodes in the default queue of this site
     servers = {}
     if os.path.isfile(server_file):
@@ -85,12 +84,17 @@ def build_server_list():
 def status_to_reservations(node_status):
     result = {}
     for node in node_status:
-        node_name = node.split(".")[0]
-        result[node_name] = []
-        for resa in node_status[node]["reservations"]:
-            start_date = datetime.fromtimestamp(resa["scheduled_at"], timezone.utc)
-            end_date = start_date + timedelta(seconds = resa["walltime"])
-            result[node_name].append({ "owner": resa["user_uid"], "start_date": start_date, "end_date": end_date })
+        if len(node_status[node]["reservations"]) > 0:
+            node_name = node.split(".")[0]
+            result[node_name] = []
+            for resa in node_status[node]["reservations"]:
+                start_date = resa["scheduled_at"]
+                end_date = start_date + resa["walltime"]
+                result[node_name].append({
+                    "owner": resa["user_uid"],
+                    "start_date": start_date,
+                    "end_date": end_date
+                })
     return result
 
 
@@ -138,7 +142,7 @@ def node_configure(arg_dict):
         "node_bin": { "values": [], "mandatory": True },
     }
     conf_prop.update(config["configure_prop"][config["node_type"]])
-    # Load the job configuration file
+    # Get the jobs in the schedule by reading the DB
     db = open_session()
     schedule = db.query(Schedule).filter(Schedule.owner == arg_dict["user"]).all()
     uids = { sch.node_name: sch for sch in schedule}
@@ -149,6 +153,7 @@ def node_configure(arg_dict):
     check_deleted_jobs(uids, user_jobs, db)
     # Add the unregistered grid5000 jobs to the DB
     for j in user_jobs:
+        # Wait for the start_date
         while j.started_at == 0:
             j.refresh()
             time.sleep(1)
@@ -156,12 +161,8 @@ def node_configure(arg_dict):
         if job_id in uids:
             schedule = uids[job_id]
         else:
-            if j.started_at is None:
-                start_date = "undefined"
-                end_date = "undefined"
-            else:
-                start_date = datetime.fromtimestamp(j.started_at)
-                end_date = datetime.fromtimestamp(j.started_at + j.walltime)
+            start_date = j.started_at
+            end_date = j.started_at + j.walltime
             # Record the job properties to the database
             schedule = Schedule()
             schedule.node_name = str(j.uid)
@@ -175,8 +176,8 @@ def node_configure(arg_dict):
         if schedule.state == "configuring":
             job_name = "job %s" % schedule.node_name
             result[job_name] = conf_prop
-            result[job_name]["start_date"] = str(schedule.start_date)
-            result[job_name]["end_date"] = str(schedule.end_date)
+            result[job_name]["start_date"] = schedule.start_date
+            result[job_name]["end_date"] = schedule.end_date
     close_session(db)
     return json.dumps(result)
 
@@ -265,6 +266,8 @@ def node_deployagain(arg_dict):
     for n in nodes:
         if n.state == "ready":
             node_action = db.query(Action).filter(Action.node_name == n.node_name).first()
+            if node_action is not None:
+                db.delete(node_action)
             # The deployment is completed, add a new action
             node_action = new_action(n, db)
             # The deployment is completed, add a new action
@@ -293,28 +296,28 @@ def node_destroy(arg_dict):
         return json.dumps(result)
     logging.info("Destroying the nodes: %s" % wanted)
     result = {}
-    db = open_session()
-    # Delete actions in progress for the nodes to destroy
-    actions = db.query(Action).filter(Action.node_name.in_(wanted)).all()
-    for action in actions:
-        db.delete(action)
-    # Get the reservations to destroy
-    nodes = db.query(Schedule
-            ).filter(Schedule.node_name.in_(wanted)
-            ).filter(Schedule.owner == user
-            ).all()
-    for n in nodes:
-        if n.state == "configuring":
-            # The node is not deployed, delete the reservation and the associated properties
-            free_reserved_node(db, n.node_name)
-            result[n.node_name] = "success"
-        else:
-            # Create a new action to start the destroy action
-            node_action = new_action(n, db)
-            init_action_process(node_action, "destroy")
-            db.add(node_action)
-            result[n.node_name] = "success"
-    close_session(db)
+    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
+    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
+    for job in user_jobs:
+        job.delete()
+        uid_str = str(job.uid)
+        if uid_str in wanted:
+            logging.info("[%s] delete this job" % uid_str)
+            db = open_session()
+            # Delete actions in progress for the nodes to destroy
+            actions = db.query(Action).filter(Action.node_name == uid_str).all()
+            for action in actions:
+                db.delete(action)
+            # Get the reservations to destroy
+            nodes = db.query(Schedule
+                    ).filter(Schedule.node_name == uid_str
+                    ).filter(Schedule.owner == user
+                    ).all()
+            for n in nodes:
+                # The node is not deployed, delete the reservation and the associated properties
+                free_reserved_node(db, n.node_name)
+                result[n.node_name] = "success"
+            close_session(db)
     # Build the result
     for n in wanted:
         if n not in result:
@@ -333,9 +336,6 @@ def node_extend(arg_dict):
         for n in wanted:
             result[n] = "no_email"
         return json.dumps(result)
-    # Get the current date
-    now = datetime.now(timezone.utc)
-    now = now.replace(tzinfo = None)
     # Get information about the requested nodes
     db = open_session()
     nodes = db.query(Schedule
@@ -344,12 +344,25 @@ def node_extend(arg_dict):
             ).all()
     for n in nodes:
         # Allow users to extend their reservation 4 hours before the end_date
-        if (n.end_date - now).total_seconds() < 4 * 3600:
-            new_end_date = n.end_date + (n.end_date - n.start_date)
-            if (new_end_date - n.start_date).days > 7:
-                new_end_date = n.start_date + timedelta(days=7)
-            n.end_date = new_end_date
-            result[n.node_name] = "success"
+        if n.end_date - int(time.time()) < 4 * 3600:
+            hours_added = int((n.end_date - n.start_date) / 3600)
+            api_url = "https://api.grid5000.fr/stable/sites/%s/internal/oarapi/jobs/%s.json" % (
+                G5K_SITE.uid, n.node_name)
+            g5k_login = (get_config()["grid5000_user"], get_config()["grid5000_password"])
+            json_data = {"method":"walltime-change", "walltime":"+%d:00" % hours_added }
+            r = requests.post(url = api_url, auth = g5k_login, json = json_data)
+            if r.status_code == 202:
+                if r.json()["status"] == "Accepted":
+                    result[n.node_name] = "success"
+                else:
+                    error_msg = "failure: walltime modification rejected"
+                    logging.error(error_msg)
+                    logging.error(r.json())
+                    result[n.node_name] = error_msg
+            else:
+                error_msg = "failure: wrong API return code %d" % r.status_code
+                logging.error(error_msg)
+                result[n.node_name] = error_msg
         else:
             result[n.node_name] = "failure: it is too early to extend the reservation"
     close_session(db)
@@ -360,40 +373,8 @@ def node_extend(arg_dict):
     return json.dumps(result)
 
 
-def node_hardrebboot(arg_dict):
-    result = {}
-    # Check POST data
-    if "nodes" not in arg_dict or "user" not in arg_dict:
-        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
-    wanted = arg_dict["nodes"]
-    user = arg_dict["user"]
-    if len(user) == 0 or '@' not in  user:
-        for n in wanted:
-            result[n] = "no_email"
-        return json.dumps(result)
-    # Get information about the requested nodes
-    db = open_session()
-    nodes = db.query(Schedule
-            ).filter(Schedule.node_name.in_(wanted)
-            ).filter(Schedule.owner == user
-            ).all()
-    for n in nodes:
-        if n.state == "ready":
-            # The deployment is completed, add a new action
-            node_action = new_action(n, db)
-            save_reboot_state(node_action, db)
-            init_action_process(node_action, "reboot")
-            db.add(node_action)
-            result[n.node_name] = "success"
-        else:
-            logging.error("[%s] can not reboot because the state is not 'ready' (state: %s)" % (
-                n.node_name, n.state))
-            result[n.node_name] = "failure: %s is not ready" % n.node_name
-    close_session(db)
-    # Build the result
-    for n in wanted:
-        if n not in result:
-            result[n] = "failure"
+def node_hardreboot(arg_dict):
+    result = {"error": "this operation is not available from g5k nodes"}
     return json.dumps(result)
 
 
@@ -432,8 +413,8 @@ def node_mine(arg_dict):
             result["nodes"][uid_str] = {
                 "node_name": uid_str,
                 "bin": my_conf.bin,
-                "start_date": str(my_conf.start_date),
-                "end_date": str(my_conf.end_date),
+                "start_date": my_conf.start_date,
+                "end_date": my_conf.end_date,
                 "state": my_conf.state,
                 "job_state": j.state
             }
@@ -462,19 +443,15 @@ def node_reserve(arg_dict):
         "start_date" not in arg_dict or "duration" not in arg_dict:
             logging.error("Missing parameters: '%s'" % arg_dict)
             return json.dumps({
-                "parameters": "filter: {...}, user: 'email@is.fr', start_date: '2021-06-21 14:36:32', 'duration': 3" })
-    if len(arg_dict["start_date"]) != 19:
-        logging.error("Wrong date format: '%s'" % arg_dict["start_date"])
-        return json.dumps({"parameters": "Wrong date format (required: YYYY-MM-DD HH-MM)"})
+                "parameters": "filter: {...}, user: 'email@is.fr', start_date: 1623395254, 'duration': 3" })
     result = { "nodes": [] }
     user = arg_dict["user"]
     f = arg_dict["filter"]
     # f = {'nb_nodes': '3', 'model': 'RPI4B8G', 'switch': 'main_switch'}
     nb_nodes = int(f["nb_nodes"])
     del f["nb_nodes"]
-    start_date = datetime.strptime(arg_dict["start_date"], DATE_FORMAT).replace(tzinfo=timezone.utc)
-    hours_added = timedelta(hours = arg_dict["duration"])
-    end_date = start_date + hours_added
+    start_date = arg_dict["start_date"]
+    end_date = start_date + arg_dict["duration"] * 3600
     # Get the node list
     servers = build_server_list()
     filtered_nodes = []
@@ -504,17 +481,17 @@ def node_reserve(arg_dict):
             node_status[cluster_name] = status_to_reservations(G5K_SITE.clusters[cluster_name].status.list().nodes)
         ok_selected = True
         # Move the start date back 15 minutes to give the time for destroying the previous reservation
-        minutes_removed = timedelta(minutes = 15)
-        back_date = start_date - minutes_removed
+        back_date = start_date - 15 * 60
         # Check the schedule of the existing reservations
-        for reservation in node_status[cluster_name][node_name]:
-            # Only one reservation for a specific node per user
-            if reservation["owner"] == user:
-                ok_selected = False
-            # There is no reservation at the same date
-            if (back_date > reservation["start_date"] and back_date < reservation["end_date"]) or (
-                back_date < reservation["start_date"] and end_date > reservation["start_date"]):
-                ok_selected = False
+        if node_name in node_status[cluster_name]:
+            for reservation in node_status[cluster_name][node_name]:
+                # Only one reservation for a specific node per user
+                if reservation["owner"] == user:
+                    ok_selected = False
+                # There is no reservation at the same date
+                if (back_date > reservation["start_date"] and back_date < reservation["end_date"]) or (
+                    back_date < reservation["start_date"] and end_date > reservation["start_date"]):
+                    ok_selected = False
         if ok_selected:
             # Add the node to the reservation
             selected_nodes.append(node_name)
@@ -522,9 +499,11 @@ def node_reserve(arg_dict):
                 # Exit when the required number of nodes is reached
                 break;
     logging.info("Selected nodes: %s" % selected_nodes)
-    # Set the common properties of the grid5000 job
-    command = "sleep %d" % (int(arg_dict["duration"]) * 3600)
+    # Set the duration of the job
     walltime = "%s:00" % arg_dict["duration"]
+    # Set a 'sleep' command that lasts 30 days, i.e, the maximum duration of this job.
+    # This command allows to extend the reservation (see node_extend())
+    command = "sleep %d" % (30 * 24 * 3600)
     job_conf = {
         "name": "piseduce %s" % datetime.now(),
         "resources": "nodes=%d,walltime=%s" % (len(selected_nodes), walltime),
@@ -532,11 +511,11 @@ def node_reserve(arg_dict):
         "types": [ "deploy" ]
     }
     # Set the 'reservation' property to define the job's start date
-    now = datetime.utcnow().replace(tzinfo = timezone.utc)
-    delta_s = (start_date - now).total_seconds()
+    now = int(time.time())
+    delta_s = start_date - now
     if  delta_s > 5 * 60:
         # Only consider the start_date if this date is after the next 5 minutes
-        local_date = start_date.astimezone(pytz.timezone("Europe/Paris"))
+        local_date = datetime.fromtimestamp(start_date).astimezone(pytz.timezone("Europe/Paris"))
         job_conf["reservation"] = str(local_date)[:-6]
     if len(selected_nodes) == 1:
         # Reserve the node from its server name
@@ -570,37 +549,37 @@ def node_schedule(arg_dict):
                 result["nodes"][node_name] = {}
             for resa in reservations[node_name]:
                 # Round the end_date up to the next hour
-                remains = resa["end_date"].timestamp() % 3600
+                remains = resa["end_date"] % 3600
                 if remains == 0:
                     end_date_comp = resa["end_date"]
                 else:
-                    end_date_comp = datetime.fromtimestamp(resa["end_date"].timestamp() - remains + 3600, timezone.utc)
+                    end_date_comp = resa["end_date"] - remains + 3600
                 # Iterate over hours between start_date and end_date
                 hours_added = 0
-                delta = timedelta(hours = hours_added)
-                while resa["start_date"] + delta < end_date_comp:
-                    new_date = resa["start_date"] + delta
-                    day_str = str(new_date).split()[0]
-                    hour_str = str(new_date.hour)
-                    if day_str not in result["nodes"][node_name]:
-                        result["nodes"][node_name][day_str] = {}
-                    if resa["owner"] not in result["nodes"][node_name][day_str]:
-                        result["nodes"][node_name][day_str][resa["owner"]] = {
-                            "hours": [],
-                            "owner": resa["owner"],
-                            "start_hour": str(resa["start_date"]).split()[1],
-                            "end_hour": str(resa["end_date"]).split()[1]
-                        }
-                    result["nodes"][node_name][day_str][resa["owner"]]["hours"].append(hour_str)
+                while resa["start_date"] + hours_added * 3600 < end_date_comp:
+                    new_date = resa["start_date"] + hours_added * 3600
+                    result["nodes"][node_name][new_date] = {
+                        "owner": resa["owner"],
+                        "start_hour": resa["start_date"],
+                        "end_hour": resa["end_date"]
+                    }
                     hours_added += 1
-                    delta = timedelta(hours = hours_added)
     return json.dumps(result)
 
 
 def node_state(arg_dict):
     result = { "nodes": {} }
-    db = open_session()
     nodes = []
+    db = open_session()
+    # Get the jobs in the schedule by reading the DB
+    schedule = db.query(Schedule).filter(Schedule.owner == arg_dict["user"]).all()
+    uids = { sch.node_name: sch for sch in schedule}
+    # Get the grid5000 jobs for the grid5000 user
+    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
+    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
+    # Deleted jobs that do not exist anymore
+    check_deleted_jobs(uids, user_jobs, db)
+    # Get the jobs in the schedule
     if "nodes" in arg_dict:
         nodes = db.query(Schedule
             ).filter(Schedule.node_name.in_(arg_dict["nodes"])
@@ -625,12 +604,6 @@ def node_state(arg_dict):
             # There is no action associated to this node
             if n.action_state is not None and len(n.action_state) > 0:
                 result["nodes"][n.node_name]["state"] = n.action_state
-    # Get both the OS password and the environment copy progress of the nodes
-    action_props = db.query(ActionProperty
-            ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
-            ).filter(ActionProperty.prop_name.in_(["os_password", "percent"])).all()
-    for prop in action_props:
-        result["nodes"][prop.node_name][prop.prop_name] = prop.prop_value
     close_session(db)
     return json.dumps(result)
 

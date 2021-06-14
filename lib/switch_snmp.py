@@ -1,5 +1,5 @@
 from database.connector import open_session, close_session, row2props
-from database.tables import Switch
+from database.tables import RaspSwitch
 import subprocess
 
 
@@ -41,7 +41,7 @@ def switch_test(ip, community, oid):
 def switch_props(sw_name):
     # Get the information about the switch
     db = open_session()
-    props = row2props(db.query(Switch).filter(Switch.name == sw_name).all())
+    props = row2props(db.query(RaspSwitch).filter(RaspSwitch.name == sw_name).all())
     close_session(db)
     return props
 

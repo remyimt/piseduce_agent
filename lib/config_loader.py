@@ -2,7 +2,6 @@ import json, os
 
 
 CONFIG_SINGLETON = None
-DATE_FORMAT= "%Y-%m-%d %H:%M:%S"
 
 
 def load_config(config_path):

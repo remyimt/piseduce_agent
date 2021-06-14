@@ -1,7 +1,7 @@
 from api.auth import auth
 from api.tool import safe_string
 from database.connector import open_session, close_session
-from database.tables import Action, ActionProperty, Environment, Node, Switch 
+from database.tables import Action, ActionProperty, RaspEnvironment, RaspNode, RaspSwitch 
 from datetime import datetime
 from glob import glob
 from lib.config_loader import get_config
@@ -15,7 +15,7 @@ admin_v1 = flask.Blueprint("admin_v1", __name__)
 
 
 def new_switch_prop(switch_name, prop_name, prop_value):
-    new_prop = Switch()
+    new_prop = RaspSwitch()
     new_prop.name = switch_name
     new_prop.prop_name = prop_name
     new_prop.prop_value = prop_value
@@ -26,8 +26,8 @@ def new_switch_prop(switch_name, prop_name, prop_value):
 @auth
 def pimaster_node():
     db = open_session()
-    pimaster_ip = db.query(Node).filter(Node.node_name == "pimaster"
-        ).filter(Node.prop_name == "master_ip").first().prop_value
+    pimaster_ip = db.query(RaspNode).filter(RaspNode.node_name == "pimaster"
+        ).filter(RaspNode.prop_name == "master_ip").first().prop_value
     close_session(db)
     return json.dumps({ "ip": pimaster_ip })
 
@@ -81,7 +81,7 @@ def rename_nodes():
             current = node.node_name.split("-")[0]
             node.name = node.node_name.replace(current, rename_data["base_name"])
             nodes.append(node.node_name)
-        for node in db.query(Node).all():
+        for node in db.query(RaspNode).all():
             # We assume the node name looks like 'base_name-number'
             current = node.node_name.split("-")[0]
             node.name = node.node_name.replace(current, rename_data["base_name"])
@@ -162,7 +162,7 @@ def add_switch():
         for data in switch_data:
             checks[data] = { "value": switch_data[data] }
         db = open_session()
-        existing = db.query(Switch).filter(Switch.name == switch_data["name"]).all()
+        existing = db.query(RaspSwitch).filter(RaspSwitch.name == switch_data["name"]).all()
         for to_del in existing:
             db.delete(to_del)
         # Check the IP
@@ -183,7 +183,7 @@ def add_switch():
         if ip_check and snmp_check:
             db = open_session()
             # Get information about existing switches to reserve the IP range for the nodes connected to the new switch
-            all_switches = db.query(Switch).filter(Switch.prop_name.in_(["port_nb", "first_ip"])).all()
+            all_switches = db.query(RaspSwitch).filter(RaspSwitch.prop_name.in_(["port_nb", "first_ip"])).all()
             existing_info = {}
             for sw in all_switches:
                 if sw.name not in existing_info:
@@ -242,8 +242,8 @@ def port_status(switch_name):
 def switch_nodes(switch_name):
     result = { "errors": [], "nodes": {}}
     db = open_session()
-    switch_info = db.query(Switch).filter(Switch.name == switch_name).filter(Switch.prop_name == "master_port").first()
-    node_info = db.query(Node).filter(Node.prop_name.in_(["switch", "port_number"])).all()
+    switch_info = db.query(RaspSwitch).filter(RaspSwitch.name == switch_name).filter(RaspSwitch.prop_name == "master_port").first()
+    node_info = db.query(RaspNode).filter(RaspNode.prop_name.in_(["switch", "port_number"])).all()
     if switch_info is not None:
         result["nodes"][switch_info.prop_value] = "pimaster"
     # Build the node information
@@ -275,8 +275,8 @@ def turn_off(switch_name):
     if "ports" not in flask.request.json:
         result["errors"].append("Required parameters: 'ports'")
     db = open_session()
-    master_port = db.query(Switch).filter(Switch.name == switch_name
-        ).filter(Switch.prop_name == "master_port").first().prop_value
+    master_port = db.query(RaspSwitch).filter(RaspSwitch.name == switch_name
+        ).filter(RaspSwitch.prop_name == "master_port").first().prop_value
     close_session(db)
     for port in flask.request.json["ports"]:
         if port == master_port:
@@ -319,7 +319,7 @@ def init_detect(switch_name):
     logging.info("existing macs: %s" % existing_macs)
     # Check the node IP is available
     db = open_session()
-    myswitch = db.query(Switch).filter(Switch.name == switch_name).filter(Switch.prop_name == "first_ip").first()
+    myswitch = db.query(RaspSwitch).filter(RaspSwitch.name == switch_name).filter(RaspSwitch.prop_name == "first_ip").first()
     ip_offset = int(myswitch.prop_value) - 1
     close_session(db)
     result["ip_offset"] = ip_offset
@@ -471,35 +471,35 @@ def node_conf(switch_name):
         # Write the node information to the database
         if len(node_serial) > 0 and len(node_model) > 0:
             db = open_session()
-            existing = db.query(Node).filter(Node.node_name == node_name).all()
+            existing = db.query(RaspNode).filter(RaspNode.node_name == node_name).all()
             for to_del in existing:
                 db.delete(to_del)
             # add 'switch' property
-            prop_db = Node()
+            prop_db = RaspNode()
             prop_db.node_name = node_name
             prop_db.prop_name = "port_number"
             prop_db.prop_value = node_port
             db.add(prop_db)
             # add 'port_number' property
-            prop_db = Node()
+            prop_db = RaspNode()
             prop_db.node_name = node_name
             prop_db.prop_name = "switch"
             prop_db.prop_value = switch_name
             db.add(prop_db)
             # add 'ip' property
-            prop_db = Node()
+            prop_db = RaspNode()
             prop_db.node_name = node_name
             prop_db.prop_name = "ip"
             prop_db.prop_value = node_ip
             db.add(prop_db)
             # add 'model' property
-            prop_db = Node()
+            prop_db = RaspNode()
             prop_db.node_name = node_name
             prop_db.prop_name = "model"
             prop_db.prop_value = node_model
             db.add(prop_db)
             # add 'serial' property
-            prop_db = Node()
+            prop_db = RaspNode()
             prop_db.node_name = node_name
             prop_db.prop_name = "serial"
             prop_db.prop_value = node_serial
@@ -540,7 +540,7 @@ def add_node():
             missing_data[prop] = []
             if prop == "switch":
                 db = open_session()
-                switches = db.query(distinct(Switch.name)).all()
+                switches = db.query(distinct(RaspSwitch.name)).all()
                 if len(switches) == 0:
                     missing_data[prop].append("no_values")
                 else:
@@ -550,12 +550,12 @@ def add_node():
     # Check if all properties belong to the POST data
     if len(missing_data) == 0:
         db = open_session()
-        existing = db.query(Node).filter(Node.node_name == json_data["name"]).all()
+        existing = db.query(RaspNode).filter(RaspNode.node_name == json_data["name"]).all()
         for to_del in existing:
             db.delete(to_del)
         for prop in node_props:
             if prop != "name":
-                prop_db = Node()
+                prop_db = RaspNode()
                 prop_db.node_name = json_data["name"]
                 prop_db.prop_name = prop
                 prop_db.prop_value = json_data[prop]
@@ -575,20 +575,20 @@ def add_environment():
     missing_data = dict([(key_data, []) for key_data in env_props if key_data not in env_data.keys()])
     if len(missing_data) == 0:
         db = open_session()
-        existing = db.query(Environment).filter(Environment.name == env_data["name"]).all()
+        existing = db.query(RaspEnvironment).filter(RaspEnvironment.name == env_data["name"]).all()
         for to_del in existing:
             db.delete(to_del)
         for prop in env_props:
             if prop != "name":
                 if prop == "desc":
                     for d in env_data["desc"]:
-                        env_db = Environment()
+                        env_db = RaspEnvironment()
                         env_db.name = env_data["name"]
                         env_db.prop_name = prop
                         env_db.prop_value = d
                         db.add(env_db)
                 else:
-                    env_db = Environment()
+                    env_db = RaspEnvironment()
                     env_db.name = env_data["name"]
                     env_db.prop_name = prop
                     env_db.prop_value = env_data[prop]
@@ -610,19 +610,19 @@ def delete(el_type):
     if len(missing_data) == 0:
         if el_type == "node":
             db = open_session()
-            existing = db.query(Node).filter(Node.node_name == data["name"]).all()
+            existing = db.query(RaspNode).filter(RaspNode.node_name == data["name"]).all()
             for to_del in existing:
                 db.delete(to_del)
             close_session(db)
         elif el_type == "switch":
             db = open_session()
-            existing = db.query(Switch).filter(Switch.name == data["name"]).all()
+            existing = db.query(RaspSwitch).filter(RaspSwitch.name == data["name"]).all()
             for to_del in existing:
                 db.delete(to_del)
             close_session(db)
         elif el_type == "environment":
             db = open_session()
-            existing = db.query(Environment).filter_by(name = data["name"]).all()
+            existing = db.query(RaspEnvironment).filter_by(name = data["name"]).all()
             for to_del in existing:
                 db.delete(to_del)
             close_session(db)
