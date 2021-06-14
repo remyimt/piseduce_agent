@@ -1,6 +1,6 @@
 from api.tool import safe_string
 from database.connector import open_session, close_session, row2props
-from database.tables import Action, ActionProperty, Environment, Node, Schedule, Switch
+from database.tables import Action, ActionProperty, RaspEnvironment, RaspNode, Schedule, RaspSwitch
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from lib.config_loader import DATE_FORMAT, get_config
@@ -21,7 +21,7 @@ def row2dict(alchemyResult):
 # Add the environments to the configuration
 def load_environments():
     db = open_session()
-    env_names = [name[0] for name in db.query(distinct(Environment.name)).all()]
+    env_names = [name[0] for name in db.query(distinct(RaspEnvironment.name)).all()]
     close_session(db)
     config = get_config()
     config["configure_prop"][config["node_type"]]["environment"] = { "values": env_names, "mandatory": True }
@@ -43,7 +43,7 @@ def environment_list(arg_dict):
     db = open_session()
     # Get the environments
     result = {}
-    envs = db.query(Environment).all()
+    envs = db.query(RaspEnvironment).all()
     for e in envs:
         if e.name not in result:
             result[e.name] = {}
@@ -64,7 +64,7 @@ def node_configure(arg_dict):
     # DB connection
     db = open_session()
     # List the existing environments
-    envs = db.query(Environment).filter(Environment.prop_name == "web").all()
+    envs = db.query(RaspEnvironment).filter(RaspEnvironment.prop_name == "web").all()
     for env in envs:
         conf_prop["environment"]["values"].append(env.name)
     # Get the nodes in the 'configuring' state
@@ -174,6 +174,8 @@ def node_deployagain(arg_dict):
     for n in nodes:
         if n.state == "ready":
             node_action = db.query(Action).filter(Action.node_name == n.node_name).first()
+            if node_action is not None:
+                db.delete(node_action)
             # The deployment is completed, add a new action
             node_action = new_action(n, db)
             # The deployment is completed, add a new action
@@ -310,7 +312,7 @@ def node_list(arg_dict):
     result = {}
     db = open_session()
     # Get the node properties
-    for p in db.query(Node).filter(Node.node_name != "pimaster").all():
+    for p in db.query(RaspNode).filter(RaspNode.node_name != "pimaster").all():
         if p.node_name not in result:
             result[p.node_name] = {}
         result[p.node_name][p.prop_name] = p.prop_value
@@ -338,7 +340,7 @@ def node_mine(arg_dict):
     for n in nodes:
         result["nodes"][n.node_name] = row2dict(n)
         node_names.append(n.node_name)
-    props = db.query(Node).filter(Node.node_name.in_(result["nodes"].keys())).all()
+    props = db.query(RaspNode).filter(RaspNode.node_name.in_(result["nodes"].keys())).all()
     for p in props:
         result["nodes"][p.node_name][p.prop_name] = p.prop_value
     envs = db.query(ActionProperty
@@ -350,8 +352,8 @@ def node_mine(arg_dict):
         if e.prop_name == "environment":
             # Check if the environment provides a web interface
             if e.prop_value not in env_web:
-                has_web = db.query(Environment).filter(Environment.name == e.prop_value
-                    ).filter(Environment.prop_name == "web").first().prop_value
+                has_web = db.query(RaspEnvironment).filter(RaspEnvironment.name == e.prop_value
+                    ).filter(RaspEnvironment.prop_name == "web").first().prop_value
                 env_web[e.prop_value] = has_web
             if env_web[e.prop_value] == "true":
                 #result["nodes"][e.node_name]["url"] = "http://%s:8181" % result["nodes"][e.node_name]["ip"]
@@ -385,17 +387,17 @@ def node_reserve(arg_dict):
     db = open_session()
     filtered_nodes = []
     if "name" in f:
-        # Node names are unique identifiers
-        node = db.query(Node).filter(Node.node_name == f["name"]).first()
+        # RaspNode names are unique identifiers
+        node = db.query(RaspNode).filter(RaspNode.node_name == f["name"]).first()
         if node is not None:
             filtered_nodes.append(node.node_name)
     else:
         # Get the node properties used in the filter
         node_props = {}
         if len(f) == 0:
-            nodes = db.query(Node).all()
+            nodes = db.query(RaspNode).all()
         else:
-            nodes = db.query(Node).filter(Node.prop_name.in_(f.keys())).all()
+            nodes = db.query(RaspNode).filter(RaspNode.prop_name.in_(f.keys())).all()
         for prop in nodes:
             if prop.node_name not in node_props:
                 node_props[prop.node_name] = {}
@@ -528,7 +530,7 @@ def switch_list(arg_dict):
     db = open_session()
     # Get the switches
     result = {}
-    switches = db.query(Switch).all()
+    switches = db.query(RaspSwitch).all()
     for s in switches:
         if s.name not in result:
             result[s.name] = {}

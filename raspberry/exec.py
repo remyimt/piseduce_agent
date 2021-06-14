@@ -1,5 +1,5 @@
 from database.connector import row2props
-from database.tables import ActionProperty, Node, Environment
+from database.tables import ActionProperty, RaspNode, RaspEnvironment
 from datetime import datetime
 from glob import glob
 from lib.config_loader import DATE_FORMAT, get_config
@@ -30,9 +30,9 @@ def new_password(stringLength=8):
 
 # States of the 'deploy' process (deploy environments)
 def boot_conf_exec(action, db):
-    serial = db.query(Node
-            ).filter(Node.node_name  == action.node_name
-            ).filter(Node.prop_name == "serial").first().prop_value
+    serial = db.query(RaspNode
+            ).filter(RaspNode.node_name  == action.node_name
+            ).filter(RaspNode.prop_name == "serial").first().prop_value
     # Create a folder containing network boot files that will be served via TFTP
     tftpboot_template_folder = "/tftpboot/rpiboot_uboot"
     tftpboot_node_folder = "/tftpboot/%s" % serial
@@ -45,40 +45,40 @@ def boot_conf_exec(action, db):
 
 
 def turn_off_exec(action, db):
-    node_prop = row2props(db.query(Node
-        ).filter(Node.node_name  == action.node_name
-        ).filter(Node.prop_name.in_(["switch", "port_number"])).all())
+    node_prop = row2props(db.query(RaspNode
+        ).filter(RaspNode.node_name  == action.node_name
+        ).filter(RaspNode.prop_name.in_(["switch", "port_number"])).all())
     # Turn off port
     turn_off_port(node_prop["switch"], node_prop["port_number"])
     return True
 
 
 def turn_on_exec(action, db):
-    node_prop = row2props(db.query(Node
-        ).filter(Node.node_name  == action.node_name
-        ).filter(Node.prop_name.in_(["switch", "port_number"])).all())
+    node_prop = row2props(db.query(RaspNode
+        ).filter(RaspNode.node_name  == action.node_name
+        ).filter(RaspNode.prop_name.in_(["switch", "port_number"])).all())
     # Turn on port
     turn_on_port(node_prop["switch"], node_prop["port_number"])
     return True
 
 
 def turn_on_post(action, db):
-    node_ip = db.query(Node
-            ).filter(Node.node_name  == action.node_name
-            ).filter(Node.prop_name == "ip").first().prop_value
+    node_ip = db.query(RaspNode
+            ).filter(RaspNode.node_name  == action.node_name
+            ).filter(RaspNode.prop_name == "ip").first().prop_value
     cmd = "ping -W 1 -c 1 %s" % node_ip
     subproc = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return subproc.returncode == 0
 
 
 def ssh_test_post(action, db):
-    node_ip = db.query(Node
-            ).filter(Node.node_name  == action.node_name
-            ).filter(Node.prop_name == "ip").first().prop_value
+    node_ip = db.query(RaspNode
+            ).filter(RaspNode.node_name  == action.node_name
+            ).filter(RaspNode.prop_name == "ip").first().prop_value
     # By default, we use the ssh_user of the environment. We assume the environment is deployed
-    ssh_user = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name == "ssh_user"
+    ssh_user = db.query(RaspEnvironment
+        ).filter(RaspEnvironment.name  == action.environment
+        ).filter(RaspEnvironment.prop_name == "ssh_user"
         ).first().prop_value
     expected_hostname = action.node_name
     # Check if the node boots from the NFS filesystem
@@ -113,11 +113,11 @@ def ssh_test_post(action, db):
 
 def env_copy_exec(action, db):
     env_path = get_config()["env_path"]
-    node_ip = db.query(Node
-            ).filter(Node.node_name  == action.node_name
-            ).filter(Node.prop_name == "ip").first().prop_value
-    pimaster_prop = row2props(db.query(Node).filter(Node.node_name  == "pimaster").all())
-    env_prop = row2props(db.query(Environment).filter(Environment.name  == action.environment).all())
+    node_ip = db.query(RaspNode
+            ).filter(RaspNode.node_name  == action.node_name
+            ).filter(RaspNode.prop_name == "ip").first().prop_value
+    pimaster_prop = row2props(db.query(RaspNode).filter(RaspNode.node_name  == "pimaster").all())
+    env_prop = row2props(db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).all())
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -168,8 +168,8 @@ def env_copy_post(action, db):
 
 def env_check_exec(action, db):
     ret_fct = False
-    img_size = db.query(Environment).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name  == "img_size"
+    img_size = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment
+        ).filter(RaspEnvironment.prop_name  == "img_size"
         ).first().prop_value
     percent_prop = db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
@@ -225,9 +225,9 @@ def delete_partition_exec(action, db):
 
 
 def create_partition_exec(action, db):
-    sector_start = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name  == "sector_start"
+    sector_start = db.query(RaspEnvironment
+        ).filter(RaspEnvironment.name  == action.environment
+        ).filter(RaspEnvironment.prop_name  == "sector_start"
         ).first().prop_value
     act_prop = row2props(db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
@@ -450,9 +450,9 @@ def system_conf_exec(action, db):
 
 
 def boot_files_exec(action, db):
-    serial = db.query(Node
-        ).filter(Node.node_name  == action.node_name
-        ).filter(Node.prop_name == "serial"
+    serial = db.query(RaspNode
+        ).filter(RaspNode.node_name  == action.node_name
+        ).filter(RaspNode.prop_name == "serial"
         ).first().prop_value
     # Copy boot files to the tftp directory
     tftpboot_node_folder = "/tftpboot/%s" % serial
@@ -494,9 +494,9 @@ def system_update_exec(action, db):
         logging.info("[%s] the OS update is disabled" % action.node_name)
         return True
     # Update the operating system
-    ssh_user = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name == "ssh_user"
+    ssh_user = db.query(RaspEnvironment
+        ).filter(RaspEnvironment.name  == action.environment
+        ).filter(RaspEnvironment.prop_name == "ssh_user"
         ).first().prop_value
     if action.environment.startswith("raspbian") or action.environment.startswith("ubuntu"):
         try:
@@ -531,9 +531,9 @@ def system_update_post(action, db):
         # Do not update the operating system
         return True
     # Update the operating system
-    ssh_user = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name == "ssh_user"
+    ssh_user = db.query(RaspEnvironment
+        ).filter(RaspEnvironment.name  == action.environment
+        ).filter(RaspEnvironment.prop_name == "ssh_user"
         ).first().prop_value
     try:
         ssh = paramiko.SSHClient()
@@ -564,13 +564,13 @@ def boot_update_exec(action, db):
     if update_os == "no":
         # The operating system is not updated => do not update the boot files
         return True
-    ssh_user = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name == "ssh_user"
+    ssh_user = db.query(RaspEnvironment
+        ).filter(RaspEnvironment.name  == action.environment
+        ).filter(RaspEnvironment.prop_name == "ssh_user"
         ).first().prop_value
-    serial = db.query(Node
-        ).filter(Node.node_name  == action.node_name
-        ).filter(Node.prop_name == "serial"
+    serial = db.query(RaspNode
+        ).filter(RaspNode.node_name  == action.node_name
+        ).filter(RaspNode.prop_name == "serial"
         ).first().prop_value
     # Copy boot files to the tftp directory
     tftpboot_node_folder = "/tftpboot/%s" % serial
@@ -603,9 +603,9 @@ def user_conf_exec(action, db):
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name.in_(["os_password", "form_ssh_key", "account_ssh_key" ])
         ).all())
-    ssh_user = db.query(Environment
-        ).filter(Environment.name  == action.environment
-        ).filter(Environment.prop_name == "ssh_user"
+    ssh_user = db.query(RaspEnvironment
+        ).filter(RaspEnvironment.name  == action.environment
+        ).filter(RaspEnvironment.prop_name == "ssh_user"
         ).first().prop_value
     try:
         ssh = paramiko.SSHClient()
@@ -646,14 +646,14 @@ def user_conf_exec(action, db):
 
 # Destroying deployments
 def destroying_exec(action, db):
-    node_prop = row2props(db.query(Node
-        ).filter(Node.node_name  == action.node_name
-        ).filter(Node.prop_name.in_(["model", "serial" ])
+    node_prop = row2props(db.query(RaspNode
+        ).filter(RaspNode.node_name  == action.node_name
+        ).filter(RaspNode.prop_name.in_(["model", "serial" ])
         ).all())
     if action.environment is not None:
-        ssh_user_db = db.query(Environment
-            ).filter(Environment.name  == action.environment
-            ).filter(Environment.prop_name == "ssh_user"
+        ssh_user_db = db.query(RaspEnvironment
+            ).filter(RaspEnvironment.name  == action.environment
+            ).filter(RaspEnvironment.prop_name == "ssh_user"
             ).first()
         # When destroying initialized deployments, the environment is unset
         ssh = paramiko.SSHClient()
