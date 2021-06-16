@@ -1,22 +1,11 @@
 from api.tool import safe_string
 from database.connector import open_session, close_session, row2props
 from database.tables import Action, ActionProperty, RaspEnvironment, RaspNode, Schedule, RaspSwitch
-from datetime import datetime, timedelta, timezone
 from importlib import import_module
-from lib.config_loader import DATE_FORMAT, get_config
-from sqlalchemy import distinct, inspect, and_, or_
+from lib.config_loader import get_config
+from sqlalchemy import distinct, and_, or_
 from agent_exec import free_reserved_node, new_action, init_action_process, save_reboot_state
-import json, logging
-
-def row2dict(alchemyResult):
-    result = {}
-    for c in inspect(alchemyResult).mapper.column_attrs:
-        if isinstance(getattr(alchemyResult, c.key), datetime):
-            result[c.key] = getattr(alchemyResult, c.key).strftime(DATE_FORMAT)
-        else:
-            result[c.key] = getattr(alchemyResult, c.key)
-    return result
-
+import json, logging, time
 
 # Add the environments to the configuration
 def load_environments():
@@ -77,8 +66,8 @@ def node_configure(arg_dict):
             node_type = get_config()["node_type"]
             conf_prop.update(get_config()["configure_prop"][node_type])
         result[n.node_name] = conf_prop.copy()
-        result[n.node_name]["start_date"] = n.start_date.strftime(DATE_FORMAT)
-        result[n.node_name]["end_date"] = n.end_date.strftime(DATE_FORMAT)
+        result[n.node_name]["start_date"] = n.start_date
+        result[n.node_name]["end_date"] = n.end_date
     close_session(db)
     return json.dumps(result)
 
@@ -245,8 +234,7 @@ def node_extend(arg_dict):
             result[n] = "no_email"
         return json.dumps(result)
     # Get the current date
-    now = datetime.now(timezone.utc)
-    now = now.replace(tzinfo = None)
+    now = int(time.time())
     # Get information about the requested nodes
     db = open_session()
     nodes = db.query(Schedule
@@ -255,10 +243,11 @@ def node_extend(arg_dict):
             ).all()
     for n in nodes:
         # Allow users to extend their reservation 4 hours before the end_date
-        if (n.end_date - now).total_seconds() < 4 * 3600:
+        if n.end_date - now < 4 * 3600:
             new_end_date = n.end_date + (n.end_date - n.start_date)
-            if (new_end_date - n.start_date).days > 7:
-                new_end_date = n.start_date + timedelta(days=7)
+            if new_end_date - n.start_date > 7 * 24 * 3600:
+                # The maximum duration of reservations is one week
+                new_end_date = n.start_date + 7 * 24 * 3600
             n.end_date = new_end_date
             result[n.node_name] = "success"
         else:
@@ -271,7 +260,7 @@ def node_extend(arg_dict):
     return json.dumps(result)
 
 
-def node_hardrebboot(arg_dict):
+def node_hardreboot(arg_dict):
     result = {}
     # Check POST data
     if "nodes" not in arg_dict or "user" not in arg_dict:
@@ -338,8 +327,14 @@ def node_mine(arg_dict):
             ).filter(Schedule.state != "configuring"
             ).all()
     for n in nodes:
-        result["nodes"][n.node_name] = row2dict(n)
-        node_names.append(n.node_name)
+        result["nodes"][n.node_name] = {
+            "node_name": n.node_name,
+            "bin": n.bin,
+            "start_date": n.start_date,
+            "end_date": n.end_date,
+            "state": n.state,
+            "action_state": n.action_state
+        }
     props = db.query(RaspNode).filter(RaspNode.node_name.in_(result["nodes"].keys())).all()
     for p in props:
         result["nodes"][p.node_name][p.prop_name] = p.prop_value
@@ -371,19 +366,18 @@ def node_reserve(arg_dict):
         "start_date" not in arg_dict or "duration" not in arg_dict:
             logging.error("Missing parameters: '%s'" % arg_dict)
             return json.dumps({
-                "parameters": "filter: {...}, user: 'email@is.fr', start_date: '2021-06-21 14:36:32', 'duration': 3" })
-    if len(arg_dict["start_date"]) != 19:
+                "parameters": "filter: {...}, user: 'email@is.fr', start_date: 1623750201, 'duration': 3" })
+    if len(str(arg_dict["start_date"])) != 10:
         logging.error("Wrong date format: '%s'" % arg_dict["start_date"])
-        return json.dumps({"parameters": "Wrong date format (required: YYYY-MM-DD HH-MM)"})
+        return json.dumps({"parameters": "Wrong date format (timestamps in seconds are required)"})
     result = { "nodes": [] }
     user = arg_dict["user"]
     f = arg_dict["filter"]
     # f = {'nb_nodes': '3', 'model': 'RPI4B8G', 'switch': 'main_switch'}
     nb_nodes = int(f["nb_nodes"])
     del f["nb_nodes"]
-    start_date = datetime.strptime(arg_dict["start_date"], DATE_FORMAT)
-    hours_added = timedelta(hours = arg_dict["duration"])
-    end_date = start_date + hours_added
+    start_date = arg_dict["start_date"]
+    end_date = start_date + arg_dict["duration"] * 3600
     db = open_session()
     filtered_nodes = []
     if "name" in f:
@@ -415,8 +409,7 @@ def node_reserve(arg_dict):
     for node_name in filtered_nodes:
         ok_selected = True
         # Move the start date back 15 minutes to give the time for destroying the previous reservation
-        minutes_removed = timedelta(minutes = 15)
-        back_date = start_date - minutes_removed
+        back_date = start_date - 15 * 60
         # Check the schedule of the existing reservations
         for reservation in db.query(Schedule).filter(Schedule.node_name == node_name).all():
             # Only one reservation for a specific node per user
@@ -454,36 +447,22 @@ def node_schedule(arg_dict):
     for sch in db.query(Schedule).all():
         if sch.node_name not in result["nodes"]:
             result["nodes"][sch.node_name] = {}
+        # Round the end_date up to the next hour
+        remains = sch.end_date % 3600
+        if remains == 0:
+            end_date_comp = sch.end_date
+        else:
+            end_date_comp = sch.end_date - remains + 3600
+        # Iterate over hours between start_date and end_date
         hours_added = 0
-        delta = timedelta(hours = hours_added)
-        while sch.start_date + delta < sch.end_date:
-            new_date = sch.start_date + delta
-            day_str = str(new_date).split()[0]
-            hour_str = str(new_date.hour)
-            if day_str not in result["nodes"][sch.node_name]:
-                result["nodes"][sch.node_name][day_str] = {}
-            if sch.owner not in result["nodes"][sch.node_name][day_str]:
-                result["nodes"][sch.node_name][day_str][sch.owner] = {
-                    "hours": [],
-                    "owner": sch.owner,
-                    "start_hour": str(sch.start_date).split()[1],
-                    "end_hour": str(sch.end_date).split()[1]
-                }
-            result["nodes"][sch.node_name][day_str][sch.owner]["hours"].append(hour_str)
-            hours_added += 1
-            delta = timedelta(hours = hours_added)
-        day_str = str(sch.end_date).split()[0]
-        hour_str = str(sch.end_date.hour)
-        if day_str not in result["nodes"][sch.node_name]:
-            result["nodes"][sch.node_name][day_str] = {}
-        if sch.owner not in result["nodes"][sch.node_name][day_str]:
-            result["nodes"][sch.node_name][day_str][sch.owner] = {
-                "hours": [],
+        while sch.start_date + hours_added * 3600 < end_date_comp:
+            new_date = sch.start_date + hours_added * 3600
+            result["nodes"][sch.node_name][new_date] = {
                 "owner": sch.owner,
-                "start_hour": str(sch.start_date).split()[1],
-                "end_hour": str(sch.end_date).split()[1]
+                "start_hour": sch.start_date,
+                "end_hour": sch.end_date
             }
-        result["nodes"][sch.node_name][day_str][sch.owner]["hours"].append(hour_str)
+            hours_added += 1
     close_session(db)
     return json.dumps(result)
 

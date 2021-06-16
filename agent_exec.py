@@ -247,7 +247,6 @@ if __name__ == "__main__":
         else:
             # The reboot action can not be executed
             node.state = "ready"
-
     close_session(db)
     # Analyzing the database
     while not os.path.isfile(STOP_FILE):
