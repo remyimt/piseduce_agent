@@ -17,7 +17,7 @@ PROCESS = {
         {
             'environments': [],
             'states': [
-                'destroying', 'turn_off', 'destroyed'
+                'destroying', 'destroyed'
             ]
         }
     ],

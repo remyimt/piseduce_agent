@@ -152,6 +152,7 @@ def node_configure(arg_dict):
     # Deleted jobs that do not exist anymore
     check_deleted_jobs(uids, user_jobs, db)
     # Add the unregistered grid5000 jobs to the DB
+    logging.info("jobs: %s" % user_jobs)
     for j in user_jobs:
         # Wait for the start_date
         while j.started_at == 0:
@@ -296,28 +297,23 @@ def node_destroy(arg_dict):
         return json.dumps(result)
     logging.info("Destroying the nodes: %s" % wanted)
     result = {}
-    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
-    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
-    for job in user_jobs:
-        job.delete()
-        uid_str = str(job.uid)
-        if uid_str in wanted:
-            logging.info("[%s] delete this job" % uid_str)
-            db = open_session()
-            # Delete actions in progress for the nodes to destroy
-            actions = db.query(Action).filter(Action.node_name == uid_str).all()
-            for action in actions:
-                db.delete(action)
-            # Get the reservations to destroy
-            nodes = db.query(Schedule
-                    ).filter(Schedule.node_name == uid_str
-                    ).filter(Schedule.owner == user
-                    ).all()
-            for n in nodes:
-                # The node is not deployed, delete the reservation and the associated properties
-                free_reserved_node(db, n.node_name)
-                result[n.node_name] = "success"
-            close_session(db)
+    db = open_session()
+    # Delete actions in progress for the nodes to destroy
+    actions = db.query(Action).filter(Action.node_name.in_(wanted)).all()
+    for action in actions:
+        db.delete(action)
+    # Get the reservations to destroy
+    nodes = db.query(Schedule
+            ).filter(Schedule.node_name.in_(wanted)
+            ).filter(Schedule.owner == user
+            ).all()
+    for n in nodes:
+        # Create a new action to start the destroy action
+        node_action = new_action(n, db)
+        init_action_process(node_action, "destroy")
+        db.add(node_action)
+        result[n.node_name] = "success"
+    close_session(db)
     # Build the result
     for n in wanted:
         if n not in result:
@@ -353,6 +349,7 @@ def node_extend(arg_dict):
             r = requests.post(url = api_url, auth = g5k_login, json = json_data)
             if r.status_code == 202:
                 if r.json()["status"] == "Accepted":
+                    n.end_date += hours_added * 3600
                     result[n.node_name] = "success"
                 else:
                     error_msg = "failure: walltime modification rejected"

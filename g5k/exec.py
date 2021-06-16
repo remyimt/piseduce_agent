@@ -74,3 +74,16 @@ def wait_deploying_post(action, db):
             return d.status == "terminated"
     logging.error("No deployment with the UUID %s" % deployment)
     return False
+
+
+def destroying_exec(action, db):
+    # Get the jobs of the user
+    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
+    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
+    for job in user_jobs:
+        uid_str = str(job.uid)
+        if uid_str == action.node_name:
+            logging.info("[%s] delete this job" % uid_str)
+            job.delete()
+            return True
+    return False
