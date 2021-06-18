@@ -1,24 +1,37 @@
+from api.tool import decrypt_password
 from database.tables import ActionProperty
 from grid5000 import Grid5000
 from lib.config_loader import get_config
 import logging
 
 
-G5K_SITE = Grid5000(
-    username = get_config()["grid5000_user"],
-    password = get_config()["grid5000_password"]
-).sites[get_config()["grid5000_site"]]
+def g5k_connect(action, db):
+    credential = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == action.node_name
+        ).filter(ActionProperty.prop_name == "g5k").first()
+    user = credential.prop_value.split("/", 1)[0]
+    pwd = credential.prop_value.split("/", 1)[1]
+    return (Grid5000(
+        username = user,
+        password = decrypt_password(pwd)
+    ).sites[get_config()["grid5000_site"]], user)
 
 
 def wait_running_post(action, db):
-    for j in G5K_SITE.jobs.list(state="running", user = get_config()["grid5000_user"]):
+    g5k_info = g5k_connect(action, db)
+    g5k_site = g5k_info[0]
+    g5k_user = g5k_info[1]
+    for j in g5k_site.jobs.list(state="running", user = g5k_user):
         if str(j.uid) == action.node_name:
             return True
     return False
 
 
 def deploy_exec(action, db):
-    for j in G5K_SITE.jobs.list(state="running", user = get_config()["grid5000_user"]):
+    g5k_info = g5k_connect(action, db)
+    g5k_site = g5k_info[0]
+    g5k_user = g5k_info[1]
+    for j in g5k_site.jobs.list(state="running", user = g5k_user):
         if str(j.uid) == action.node_name:
             j.refresh()
             if len(j.assigned_nodes) > 0:
@@ -69,7 +82,10 @@ def wait_deploying_post(action, db):
     if dep_uid is None:
         logging.error("[%s] No deployment UID" % action.node_name)
         return False
-    for d in G5K_SITE.deployments.list(user = get_config()["grid5000_user"]):
+    g5k_info = g5k_connect(action, db)
+    g5k_site = g5k_info[0]
+    g5k_user = g5k_info[1]
+    for d in g5k_site.deployments.list(user = g5k_user):
         if d.uid == dep_uid.prop_value:
             return d.status == "terminated"
     logging.error("No deployment with the UUID %s" % deployment)
@@ -77,9 +93,12 @@ def wait_deploying_post(action, db):
 
 
 def destroying_exec(action, db):
+    g5k_info = g5k_connect(action, db)
+    g5k_site = g5k_info[0]
+    g5k_user = g5k_info[1]
     # Get the jobs of the user
-    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
-    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
+    user_jobs = G5K_SITE.jobs.list(state = "running", user = g5k_user)
+    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = g5k_user)
     for job in user_jobs:
         uid_str = str(job.uid)
         if uid_str == action.node_name:

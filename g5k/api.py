@@ -1,4 +1,4 @@
-from api.tool import safe_string
+from api.tool import safe_string, decrypt_password
 from database.connector import open_session, close_session
 from database.tables import Action, ActionProperty, Schedule
 from datetime import datetime, timedelta, timezone
@@ -9,17 +9,18 @@ from agent_exec import free_reserved_node, new_action, init_action_process, save
 import json, logging, os, pytz, requests, time
 
 
-G5K_SITE = Grid5000(
-    username = get_config()["grid5000_user"],
-    password = get_config()["grid5000_password"]
-).sites[get_config()["grid5000_site"]]
+def g5k_connect(args):
+    return Grid5000(
+        username = args["g5k_user"],
+        password = decrypt_password(args["g5k_password"])
+    ).sites[get_config()["g5k_site"]]
 
 
 # Delete the jobs existing in the schedule but not in the g5k API
 def check_deleted_jobs(db_jobs, g5k_jobs, db):
     """
     db_jobs: { job_uid: db_schedule_obj }
-    g5k_jobs: the return of G5K_SITE.jobs.list()
+    g5k_jobs: the return of g5k_site.jobs.list()
     """
     to_delete = []
     for job in db_jobs:
@@ -45,7 +46,7 @@ def delete_job(db_job, db):
     db.delete(db_job)
 
 
-def build_server_list():
+def build_server_list(g5k_site):
     # The file to build the server list without querying the grid5000 API
     server_file = "node-g5k.json"
     # Get all nodes in the default queue of this site
@@ -56,19 +57,19 @@ def build_server_list():
     else:
         # List all nodes of the site
         logging.info("Query the API to build the server list")
-        for cl in G5K_SITE.clusters.list():
-            for node in G5K_SITE.clusters[cl.uid].nodes.list():
+        for cl in g5k_site.clusters.list():
+            for node in g5k_site.clusters[cl.uid].nodes.list():
                 if "default" in node.supported_job_types["queues"]:
                     servers[node.uid] = {
                         "name": node.uid,
-                        "site": G5K_SITE.uid,
+                        "site": g5k_site.uid,
                         "cluster": cl.uid,
                         "cpu_nb": str(node.architecture["nb_threads"]),
                         "memoryMB": str(node.main_memory["ram_size"] / 1024 / 1024 / 1024),
                         "model": node.chassis["name"]
                     }
         # Remove dead servers
-        nodes = G5K_SITE.status.list().nodes
+        nodes = g5k_site.status.list().nodes
         for node  in nodes:
             node_name = node.split(".")[0]
             if node_name in servers:
@@ -133,7 +134,11 @@ def environment_list(arg_dict):
 
 def node_configure(arg_dict):
     if "user" not in arg_dict or "@" not in arg_dict["user"]:
-        return json.dumps({ "parameters": "user: 'email@is.fr'" })
+        return json.dumps({
+            "parameters": {
+                "user": "email@is.fr"
+            }
+        })
     result = {}
     # Common properties to every kind of nodes
     config = get_config()
@@ -146,9 +151,11 @@ def node_configure(arg_dict):
     db = open_session()
     schedule = db.query(Schedule).filter(Schedule.owner == arg_dict["user"]).all()
     uids = { sch.node_name: sch for sch in schedule}
+    # Connect to the grid5000 API
+    g5k_site = g5k_connect(arg_dict)
     # Get the grid5000 jobs for the grid5000 user
-    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
-    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
+    user_jobs = g5k_site.jobs.list(state = "running", user = arg_dict["g5k_user"])
+    user_jobs += g5k_site.jobs.list(state = "waiting", user = arg_dict["g5k_user"])
     # Deleted jobs that do not exist anymore
     check_deleted_jobs(uids, user_jobs, db)
     # Add the unregistered grid5000 jobs to the DB
@@ -185,9 +192,15 @@ def node_configure(arg_dict):
 
 def node_deploy(arg_dict):
     # Check the parameters
-    error_msg = { "parameters": 
-            "user: 'email@is.fr', 'nodes': {'node-3': { 'node_bin': 'my_bin', 'environment': 'my-env' }}" }
     if "user" not in arg_dict or "@" not in arg_dict["user"] or "nodes" not in arg_dict:
+        error_msg = {
+            "parameters": {
+                "user": "email@is.fr",
+                "nodes": {
+                    "node-3": { "node_bin": "my_bin", "environment": "my-env" }
+                }
+            }
+        }
         return json.dumps(error_msg)
     # Check the nodes dictionnary
     node_prop = arg_dict["nodes"]
@@ -251,7 +264,12 @@ def node_deployagain(arg_dict):
     result = {}
     # Check POST data
     if "nodes" not in arg_dict or "user" not in arg_dict:
-        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
+        return json.dumps({
+            "parameters": {
+                "user": "email@is.fr",
+                "nodes": ["name1", "name2" ]
+            }
+        })
     wanted = arg_dict["nodes"]
     user = arg_dict["user"]
     if len(user) == 0 or '@' not in  user:
@@ -288,7 +306,12 @@ def node_deployagain(arg_dict):
 def node_destroy(arg_dict):
     # Check POST data
     if "nodes" not in arg_dict or "user" not in arg_dict:
-        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
+        return json.dumps({
+            "parameters": {
+                "user": "email@is.fr",
+                "nodes": ["name1", "name2" ]
+            }
+        })
     wanted = arg_dict["nodes"]
     user = arg_dict["user"]
     if len(user) == 0 or '@' not in  user:
@@ -325,7 +348,12 @@ def node_extend(arg_dict):
     result = {}
     # Check POST data
     if "nodes" not in arg_dict or "user" not in arg_dict:
-        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
+        return json.dumps({
+            "parameters": {
+                "user": "email@is.fr",
+                "nodes": ["name1", "name2" ]
+            }
+        })
     wanted = arg_dict["nodes"]
     user = arg_dict["user"]
     if len(user) == 0 or '@' not in  user:
@@ -343,8 +371,8 @@ def node_extend(arg_dict):
         if n.end_date - int(time.time()) < 4 * 3600:
             hours_added = int((n.end_date - n.start_date) / 3600)
             api_url = "https://api.grid5000.fr/stable/sites/%s/internal/oarapi/jobs/%s.json" % (
-                G5K_SITE.uid, n.node_name)
-            g5k_login = (get_config()["grid5000_user"], get_config()["grid5000_password"])
+                get_config()["g5k_site"], n.node_name)
+            g5k_login = (arg_dict["g5k_user"], decrypt_password(arg_dict["g5k_password"]))
             json_data = {"method":"walltime-change", "walltime":"+%d:00" % hours_added }
             r = requests.post(url = api_url, auth = g5k_login, json = json_data)
             if r.status_code == 202:
@@ -376,12 +404,20 @@ def node_hardreboot(arg_dict):
 
 
 def node_list(arg_dict):
-    return json.dumps(build_server_list())
+    g5k_site = g5k_connect(arg_dict)
+    return json.dumps(build_server_list(g5k_site))
 
 
 def node_mine(arg_dict):
-    if "user" not in arg_dict or "@" not in arg_dict["user"]:
-        return json.dumps({ "parameters": "user: 'email@is.fr'" })
+    if "user" not in arg_dict or "@" not in arg_dict["user"] or \
+        "g5k_user" not in arg_dict or "g5k_password" not in arg_dict:
+            return json.dumps({
+                "parameters": {
+                    "user": "email@is.fr",
+                    "g5k_user": "my_user",
+                    "g5k_password": "encrypted_pwd"
+                }
+            })
     result = { "states": [], "nodes": {} }
     # Get the list of the states for the 'deploy' process
     py_module = import_module("%s.states" % get_config()["node_type"])
@@ -399,8 +435,10 @@ def node_mine(arg_dict):
     if len(db_jobs) == 0:
         close_session(db)
         return json.dumps(result)
-    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
-    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
+    # Connect to the grid5000 API
+    g5k_site = g5k_connect(arg_dict)
+    user_jobs = g5k_site.jobs.list(state = "running", user = arg_dict["g5k_user"])
+    user_jobs += g5k_site.jobs.list(state = "waiting", user = arg_dict["g5k_user"])
     check_deleted_jobs(db_jobs, user_jobs, db)
     for j in user_jobs:
         j.refresh()
@@ -437,10 +475,19 @@ def node_mine(arg_dict):
 def node_reserve(arg_dict):
     # Check arguments
     if "filter" not in arg_dict or "user" not in arg_dict or \
-        "start_date" not in arg_dict or "duration" not in arg_dict:
+        "start_date" not in arg_dict or "duration" not in arg_dict or \
+        "g5k_user" not in arg_dict or "g5k_password" not in arg_dict:
             logging.error("Missing parameters: '%s'" % arg_dict)
             return json.dumps({
-                "parameters": "filter: {...}, user: 'email@is.fr', start_date: 1623395254, 'duration': 3" })
+                "parameters": {
+                    "user": "email@is.fr",
+                    "filter": "{...}",
+                    "start_date": 1623395254,
+                    "duration": 3,
+                    "g5k_password": "my_encrypted_pwd",
+                    "g5k_user": "my_user"
+                }
+            })
     result = { "nodes": [] }
     user = arg_dict["user"]
     f = arg_dict["filter"]
@@ -449,8 +496,10 @@ def node_reserve(arg_dict):
     del f["nb_nodes"]
     start_date = arg_dict["start_date"]
     end_date = start_date + arg_dict["duration"] * 3600
+    # Connect to the grid5000 API
+    g5k_site = g5k_connect(arg_dict)
     # Get the node list
-    servers = build_server_list()
+    servers = build_server_list(g5k_site)
     filtered_nodes = []
     if "name" in f:
         if f["name"] in servers:
@@ -475,7 +524,7 @@ def node_reserve(arg_dict):
     for node_name in filtered_nodes:
         cluster_name = node_name.split("-")[0]
         if cluster_name not in node_status:
-            node_status[cluster_name] = status_to_reservations(G5K_SITE.clusters[cluster_name].status.list().nodes)
+            node_status[cluster_name] = status_to_reservations(g5k_site.clusters[cluster_name].status.list().nodes)
         ok_selected = True
         # Move the start date back 15 minutes to give the time for destroying the previous reservation
         back_date = start_date - 15 * 60
@@ -519,7 +568,7 @@ def node_reserve(arg_dict):
         logging.info("Reservation the node '%s' with the walltime '%s'" %(
             selected_nodes[0], walltime))
         job_conf["properties"] = "(host in ('%s.%s.grid5000.fr'))" % (
-            selected_nodes[0], G5K_SITE.uid)
+            selected_nodes[0], g5k_site.uid)
     else:
         # Reserve the nodes from cluster names
         clusters = set()
@@ -529,8 +578,17 @@ def node_reserve(arg_dict):
             clusters, walltime))
         job_conf["properties"] = "(cluster in (%s))" % ",".join(["'%s'" % c for c in clusters])
     try:
-        job = G5K_SITE.jobs.create(job_conf)
+        job = g5k_site.jobs.create(job_conf)
         result["nodes"] = selected_nodes
+        # Store the g5k login/password to the DB in order to use it with agent_exec.py
+        db = open_session()
+        g5k_cred = ActionProperty()
+        g5k_cred.node_name = job.uid
+        g5k_cred.owner = arg_dict["user"]
+        g5k_cred.prop_name = "g5k"
+        g5k_cred.prop_value = "%s/%s" % (arg_dict["g5k_user"], arg_dict["g5k_password"])
+        db.add(g5k_cred)
+        close_session(db)
     except:
         logging.exception("Creating job: ")
     return json.dumps(result)
@@ -538,8 +596,11 @@ def node_reserve(arg_dict):
 
 def node_schedule(arg_dict):
     result = { "nodes": {} }
-    servers = build_server_list()
-    reservations = status_to_reservations(G5K_SITE.status.list().nodes)
+    # Connect to the grid5000 API
+    g5k_site = g5k_connect(arg_dict)
+    # Get the list of servers
+    servers = build_server_list(g5k_site)
+    reservations = status_to_reservations(g5k_site.status.list().nodes)
     for node_name in reservations:
         if node_name in servers:
             if node_name not in result["nodes"]:
@@ -571,9 +632,11 @@ def node_state(arg_dict):
     # Get the jobs in the schedule by reading the DB
     schedule = db.query(Schedule).filter(Schedule.owner == arg_dict["user"]).all()
     uids = { sch.node_name: sch for sch in schedule}
+    # Connect to the grid5000 API
+    g5k_site = g5k_connect(arg_dict)
     # Get the grid5000 jobs for the grid5000 user
-    user_jobs = G5K_SITE.jobs.list(state = "running", user = get_config()["grid5000_user"])
-    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = get_config()["grid5000_user"])
+    user_jobs = g5k_site.jobs.list(state = "running", user = arg_dict["g5k_user"])
+    user_jobs += g5k_site.jobs.list(state = "waiting", user = arg_dict["g5k_user"])
     # Deleted jobs that do not exist anymore
     check_deleted_jobs(uids, user_jobs, db)
     # Get the jobs in the schedule
