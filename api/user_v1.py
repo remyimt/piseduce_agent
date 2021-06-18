@@ -243,7 +243,13 @@ def reserve():
     Example of return value:
     { "nodes": [ "node-1", "node-3", "node-5" ] }
     """
-    return getattr(api_exec_mod, "node_reserve")(flask.request.json)
+    json_data = flask.request.json
+    # Remove useless filter properties
+    if "agent" in json_data["filter"]:
+        del json_data["filter"]["agent"]
+    if "type" in json_data["filter"]:
+        del json_data["filter"]["type"]
+    return getattr(api_exec_mod, "node_reserve")(json_data)
 
 
 @user_v1.route("/configure", methods=["POST"])
