@@ -159,7 +159,6 @@ def node_configure(arg_dict):
     # Deleted jobs that do not exist anymore
     check_deleted_jobs(uids, user_jobs, db)
     # Add the unregistered grid5000 jobs to the DB
-    logging.info("jobs: %s" % user_jobs)
     for j in user_jobs:
         # Wait for the start_date
         while j.started_at == 0:
@@ -182,10 +181,9 @@ def node_configure(arg_dict):
             db.add(schedule)
         # Send the job information about job in the 'configuring' state
         if schedule.state == "configuring":
-            job_name = "job %s" % schedule.node_name
-            result[job_name] = conf_prop
-            result[job_name]["start_date"] = schedule.start_date
-            result[job_name]["end_date"] = schedule.end_date
+            result[schedule.node_name] = conf_prop
+            result[schedule.node_name]["start_date"] = schedule.start_date
+            result[schedule.node_name]["end_date"] = schedule.end_date
     close_session(db)
     return json.dumps(result)
 
@@ -226,16 +224,15 @@ def node_deploy(arg_dict):
             else:
                 result[node_name]["missing"].append("environment")
         if len(result[node_name]) == 0:
-            node_uid = node_name[4:]
             # Remove special characters from the node bin name
             node_bin = safe_string(my_prop["node_bin"])
             # Remove spaces from value
             node_bin = node_bin.replace(" ", "_")
             # Record the job configuration to the database
             db = open_session()
-            my_job = db.query(Schedule).filter(Schedule.node_name == node_uid).first()
+            my_job = db.query(Schedule).filter(Schedule.node_name == node_name).first()
             if my_job is None:
-                logging.error("job %s not found in the Schedule DB table" % node_uid)
+                logging.error("job %s not found in the Schedule DB table" % node_name)
             else:
                 my_job.bin = node_bin
                 my_job.state = "ready"

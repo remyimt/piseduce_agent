@@ -14,7 +14,7 @@ def g5k_connect(action, db):
     return (Grid5000(
         username = user,
         password = decrypt_password(pwd)
-    ).sites[get_config()["grid5000_site"]], user)
+    ).sites[get_config()["g5k_site"]], user)
 
 
 def wait_running_post(action, db):
@@ -55,7 +55,7 @@ def deploy_exec(action, db):
                 if ssh_key is not None and len(ssh_key.prop_value) > 0:
                     deployment_conf["key"] = ssh_key.prop_value
                 try:
-                    dep = G5K_SITE.deployments.create(deployment_conf)
+                    dep = g5k_site.deployments.create(deployment_conf)
                     if old_dep is None:
                         # Create an action property to register the deployment UID
                         uid_prop = ActionProperty()
@@ -97,8 +97,8 @@ def destroying_exec(action, db):
     g5k_site = g5k_info[0]
     g5k_user = g5k_info[1]
     # Get the jobs of the user
-    user_jobs = G5K_SITE.jobs.list(state = "running", user = g5k_user)
-    user_jobs += G5K_SITE.jobs.list(state = "waiting", user = g5k_user)
+    user_jobs = g5k_site.jobs.list(state = "running", user = g5k_user)
+    user_jobs += g5k_site.jobs.list(state = "waiting", user = g5k_user)
     for job in user_jobs:
         uid_str = str(job.uid)
         if uid_str == action.node_name:
