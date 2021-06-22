@@ -25,10 +25,9 @@ agent_api.register_blueprint(debug_v1, url_prefix='/v1/debug/')
 if __name__ == '__main__':
     logging.basicConfig(filename='info_api.log', level=logging.INFO,
         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    if not os.path.isfile(get_config()["key_file"]):
-        msg = """Please, generate the secret key used to share passwords with agents:
-            python3 generate_password_key.py
-        """
+    if (get_config()["node_type"] == "g5k" or get_config()["node_type"] == "iot-lab") and \
+        not os.path.isfile(get_config()["key_file"]):
+        msg = "Please, ask the secret key to the webui in order to securely share passwords!"
         print(msg)
         logging.error(msg)
         sys.exit(13)
