@@ -2,8 +2,9 @@
     "auth_token": [ "12345678912345678912" ],
     "port_number": 8090,
     "comments": "Type of the nodes managed by this agent (raspberry, g5k or iot-lab)",
-    "node_type": "g5k",
+    "node_type": "iot-lab",
     "g5k_site": "nancy",
+    "iot_site": "strasbourg",
     "key_file": "secret.key",
     "db_url": "sqlite:///test-agent.db",
     "comments": "Do not forget the ending '/' at the end of the env_path",
@@ -37,7 +38,8 @@
             "form_ssh_key": { "values": [], "mandatory": false }
         },
         "iot-lab": {
-            "os": { "values": [], "mandatory": true }
+            "firmware": { "values": [], "mandatory": false },
+            "profile": { "values": [], "mandatory": false }
         },
         "g5k": {
             "form_ssh_key": { "values": [], "mandatory": false }

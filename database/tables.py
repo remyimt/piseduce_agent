@@ -65,3 +65,23 @@ class RaspEnvironment(Base):
     name = Column(Text, primary_key=True)
     prop_name = Column(Text, primary_key=True)
     prop_value = Column(Text)
+
+# Table for IoT-Lab agents
+class IotSelection(Base):
+    __tablename__ = 'iot_selection'
+    # autoincrement unique identifier
+    uid = Column(Integer, primary_key=True)
+    owner = Column(Text)
+    filter_str = Column(Text)
+    archi = Column(Text)
+    # node id list (node identifiers separated by '+'), e.g., '1+2+5+10'
+    node_ids = Column(Text)
+    node_nb = Column(Integer)
+    start_date = Column(Integer)
+    end_date = Column(Integer)
+
+
+class IotNodes(Base):
+    __tablename__ = 'iot_nodes'
+    job_id = Column(Integer, primary_key=True, autoincrement=False)
+    assigned_nodes = Column(Text)

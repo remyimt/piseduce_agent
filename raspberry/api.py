@@ -7,6 +7,7 @@ from sqlalchemy import distinct, and_, or_
 from agent_exec import free_reserved_node, new_action, init_action_process, save_reboot_state
 import json, logging, time
 
+
 # Add the environments to the configuration
 def load_environments():
     db = open_session()
