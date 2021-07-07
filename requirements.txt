@@ -2,3 +2,4 @@ flask
 paramiko
 sqlalchemy
 python-grid5000
+iotlabcli
