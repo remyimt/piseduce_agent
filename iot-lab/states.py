@@ -9,7 +9,7 @@ PROCESS = {
         {
             'environments': [],
             'states': [
-                'launching', 'running', 'finishing', 'terminated', 'stopped'
+                'waiting', 'launching', 'running', 'finishing', 'terminated', 'stopped'
             ]
         }
     ],

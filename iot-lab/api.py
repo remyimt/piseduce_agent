@@ -196,11 +196,21 @@ def node_deploy(arg_dict):
                         iot_list += ",%s" % firmware_path
                     if len(my_prop["profile"]) > 0:
                         iot_list += ",,%s" % my_prop["profile"].split("-", 1)[1]
-                cmd = "iotlab-experiment -u %s -p %s submit -d %d -l %s" % (
-                    arg_dict["iot_user"],
-                    decrypt_password(arg_dict["iot_password"]),
-                    (sel.end_date - sel.start_date) / 60,
-                    iot_list)
+                if sel.start_date > time.time() + 5 * 60:
+                    cmd = "iotlab-experiment -u %s -p %s submit -n %s -r %d -d %d -l %s" % (
+                        arg_dict["iot_user"],
+                        decrypt_password(arg_dict["iot_password"]),
+                        node_bin,
+                        sel.start_date,
+                        (sel.end_date - sel.start_date) / 60,
+                        iot_list)
+                else:
+                    cmd = "iotlab-experiment -u %s -p %s submit -n %s -d %d -l %s" % (
+                        arg_dict["iot_user"],
+                        decrypt_password(arg_dict["iot_password"]),
+                        node_bin,
+                        (sel.end_date - sel.start_date) / 60,
+                        iot_list)
                 process = subprocess.run(cmd, shell=True,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
                 if process.returncode > 0:
