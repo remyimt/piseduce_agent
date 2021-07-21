@@ -27,7 +27,7 @@
     ],
     "comments": "Required properties to add environments to raspberry agents",
     "env_prop": [
-        "name", "desc", "img_name", "img_size", "sector_start", "ssh_user", "web"
+        "name", "img_name", "img_size", "sector_start", "ssh_user", "web"
     ],
     "comments": "Properties to configure deployments according to the agent type",
     "configure_prop": {
