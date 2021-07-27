@@ -1,0 +1,1 @@
+nfsroot=48.48.0.254:/nfs/raspi,vers=4.1,proto=tcp console=serial0,115200 console=tty1 root=/dev/nfs rw ip=dhcp elevator=deadline fsck.repair=yes rootwait quiet splash plymouth.ignore-serial-consoles
