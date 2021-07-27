@@ -561,9 +561,9 @@ def add_node():
                 prop_db.prop_value = json_data[prop]
                 db.add(prop_db)
         close_session(db)
-        return { "node": json_data["name"] }
+        return json.dumps({ "node": json_data["name"] })
     else:
-        return {"missing": missing_data }
+        return json.dumps({"missing": missing_data })
 
 
 @admin_v1.route("/add/environment", methods=["POST"])
@@ -595,9 +595,9 @@ def add_environment():
                     db.add(env_db)
         close_session(db)
         #TODO Reload the list of the environment from the DB
-        return { "environment": env_data["name"] }
+        return json.dumps({ "environment": env_data["name"] })
     else:
-        return {"missing": missing_data }
+        return json.dumps({"missing": missing_data })
 
 
 @admin_v1.route("/delete/<el_type>", methods=["POST"])
@@ -631,7 +631,7 @@ def delete(el_type):
             delele_dhcp_ip(data["name"])
             existing = [ data["name"] ]
         else:
-            return {"type_error": data["type"] }
-        return { "delete": len(existing) }
+            return json.dumps({"type_error": data["type"] })
+        return json.dumps({ "delete": len(existing) })
     else:
-        return {"missing": missing_data }
+        return json.dumps({"missing": missing_data })
