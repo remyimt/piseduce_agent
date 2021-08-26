@@ -44,27 +44,39 @@ class Schedule(Base):
 # Tables for raspberry agents
 class RaspNode(Base):
     __tablename__ = 'rasp_node'
-    node_name = Column(Text, primary_key=True)
-    prop_name = Column(Text, primary_key=True)
-    prop_value = Column(Text)
+    name = Column(Text, primary_key=True)
+    ip = Column(Text)
+    switch = Column(Text)
+    port_number = Column(Integer)
+    model = Column(Text)
+    serial = Column(Text)
 
 
     def __repr__(self):
-        return "node(%s, %s, %s)" % (self.node_name, self.prop_name, self.prop_value)
+        return "rasp(%s, %s, %s, %s)" % (self.name, self.switch, self.port_number, self.model)
 
 
 class RaspSwitch(Base):
     __tablename__ = 'rasp_switch'
     name = Column(Text, primary_key=True)
-    prop_name = Column(Text, primary_key=True)
-    prop_value = Column(Text)
+    ip = Column(Text)
+    port_number = Column(Integer)
+    master_port = Column(Integer)
+    community = Column(Text)
+    oid = Column(Text)
+    oid_offset = Column(Integer)
+    first_ip = Column(Integer)
 
 
 class RaspEnvironment(Base):
     __tablename__ = 'rasp_environment'
     name = Column(Text, primary_key=True)
-    prop_name = Column(Text, primary_key=True)
-    prop_value = Column(Text)
+    img_name = Column(Text)
+    img_size = Column(Integer)
+    sector_start = Column(Integer)
+    ssh_user = Column(Text)
+    web = Column(Boolean)
+
 
 # Table for IoT-Lab agents
 class IotSelection(Base):

@@ -62,10 +62,7 @@ def new_action(db_node, db):
     for e in existing:
         db.delete(e)
     # Get the node IP
-    node_ip = db.query(RaspNode
-        ).filter(RaspNode.node_name == db_node.node_name
-        ).filter(RaspNode.prop_name == "ip"
-        ).first()
+    node_ip = db.query(RaspNode).filter(RaspNode.name == db_node.node_name).first().ip
     # Add a new action
     act = Action()
     act_prop = db.query(ActionProperty
@@ -76,7 +73,7 @@ def new_action(db_node, db):
         act.environment = act_prop.prop_value
     act.node_name = db_node.node_name
     if node_ip is not None:
-        act.node_ip = node_ip.prop_value
+        act.node_ip = node_ip
     db_node.state = "in_progress"
     return act
 
@@ -198,29 +195,22 @@ if __name__ == "__main__":
             if len(my_ip) > 0:
                 my_ip = my_ip[0]
     # Update the pimaster information of the database
-    pimaster_info = db.query(RaspNode).filter(RaspNode.node_name == "pimaster").all()
+    pimaster_info = db.query(RaspNode).filter(RaspNode.name == "pimaster").first()
     if len(my_user) > 0 and len(my_ip) > 0 and len(my_ip.split(".")) == 4:
-        if pimaster_info is not None and len(pimaster_info) > 0:
+        if pimaster_info is not None:
             logging.info("Update the pimaster information from existing DB records")
             # Check the pimaster information
-            for info in pimaster_info:
-                if info.prop_name == "master_user" and info.prop_value != my_user:
-                    info.prop_value = my_user
-                if info.prop_name == "master_ip" and info.prop_value != my_ip:
-                    info.prop_value = my_ip
+            pimaster_info.switch = my_user
+            pimaster_info.ip = my_ip
         else:
             # Add the pimaster information in the database
             logging.info("Create new records to register the pimaster information")
-            user_record = RaspNode()
-            user_record.node_name = "pimaster"
-            user_record.prop_name = "master_user"
-            user_record.prop_value = my_user
-            db.add(user_record)
-            ip_record = RaspNode()
-            ip_record.node_name = "pimaster"
-            ip_record.prop_name = "master_ip"
-            ip_record.prop_value = my_ip
-            db.add(ip_record)
+            master_record = RaspNode()
+            master_record.name = "pimaster"
+            master_record.switch = my_user
+            master_record.ip = my_ip
+            master_record.model = "master"
+            db.add(master_record)
         logging.info("pimaster ip: %s, pimaster user: %s" % (my_ip, my_user))
     else:
         logging.error("can not get the IP or the user of the pimaster: ip=%s, user=%s" % (my_ip, my_user))
@@ -256,15 +246,15 @@ if __name__ == "__main__":
             now = int(time.time())
             for node in db.query(Schedule).filter(Schedule.end_date < now).all():
                 logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (
-                    node.node_name, datetime.fromtimestamp(node.end_date)))
+                    node.name, datetime.fromtimestamp(node.end_date)))
                 # The reservation is expired, delete it
                 if node.state == "configuring":
                     # The node is not deployed
-                    free_reserved_node(db, node.node_name)
+                    free_reserved_node(db, node.name)
                 else:
                     # Check if a destroy action is in progress
                     destroy_action = db.query(Action
-                        ).filter(Action.node_name == node.node_name
+                        ).filter(Action.node_name == node.name
                         ).filter(Action.process == "destroy").all()
                     if len(destroy_action) == 0:
                         node_action = new_action(node, db)

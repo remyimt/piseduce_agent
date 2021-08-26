@@ -8,16 +8,6 @@ def open_session():
     return SessionLocal()
 
 
-def row2props(alchemyResults):
-    props = {}
-    for ar in alchemyResults:
-        if "prop_name" in ar.__dict__:
-            props[ar.prop_name] = ar.prop_value
-        else:
-            logging.warning("Tuple does not have 'prop_name' key (%s)" % ar)
-    return props
-
-
 def close_session(session):
     session.commit()
     session.close()

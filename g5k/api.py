@@ -9,6 +9,12 @@ from agent_exec import free_reserved_node, new_action, init_action_process, save
 import json, logging, os, pytz, requests, time
 
 
+# The required properties to configure the g5k nodes from the configure panel
+CONFIGURE_PROP = {
+    "form_ssh_key": { "values": [], "mandatory": false }
+}
+
+
 def g5k_connect(args):
     return Grid5000(
         username = args["g5k_user"],
@@ -120,8 +126,7 @@ def load_environments():
         "ubuntu1804-x64-min",
         "ubuntu2004-x64-min"
     ]
-    config = get_config()
-    config["configure_prop"][config["node_type"]]["environment"] = { "values": env_names, "mandatory": True }
+    CONFIGURE_PROP["environment"] = { "values": env_names, "mandatory": True }
 
 
 def client_list(arg_dict):
@@ -141,12 +146,11 @@ def node_configure(arg_dict):
         })
     result = {}
     # Common properties to every kind of nodes
-    config = get_config()
-    env_names = config["configure_prop"][config["node_type"]]["environment"].keys()
+    env_names = CONFIGURE_PROP["environment"].keys()
     conf_prop = {
         "node_bin": { "values": [], "mandatory": True },
     }
-    conf_prop.update(config["configure_prop"][config["node_type"]])
+    conf_prop.update(CONFIGURE_PROP)
     # Get the jobs in the schedule by reading the DB
     db = open_session()
     schedule = db.query(Schedule).filter(Schedule.owner == arg_dict["user"]).all()

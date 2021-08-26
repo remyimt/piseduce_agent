@@ -1,4 +1,4 @@
-from database.connector import open_session, close_session, row2props
+from database.connector import open_session, close_session
 from database.tables import RaspSwitch
 import subprocess
 
@@ -18,14 +18,14 @@ def switch_test(ip, community, oid):
             return {
                 "success": True,
                 "oid": detected_oid,
-                "port_nb": len(power_state),
+                "port_number": len(power_state),
                 "offset":  offset
             }
         else:
             return {
                 "success": False,
                 "oid": "useless",
-                "port_nb": 0,
+                "port_number": 0,
                 "offset":  -1
             }
     except:
@@ -33,32 +33,28 @@ def switch_test(ip, community, oid):
         return {
             "success": False,
             "oid": "useless",
-            "port_nb": 0,
+            "port_number": 0,
             "offset":  -1
         }
 
 
-def switch_props(sw_name):
-    # Get the information about the switch
-    db = open_session()
-    props = row2props(db.query(RaspSwitch).filter(RaspSwitch.name == sw_name).all())
-    close_session(db)
-    return props
-
-
 def get_poe_status(switch_name):
-    props = switch_props(switch_name)
-    oid = props["oid"]
-    cmd = "snmpwalk -v2c -c %s %s %s" % (props["community"], props["ip"], oid[:oid.rindex(".")])
+    db = open_session()
+    sw = db.query(RaspSwitch).filter(RaspSwitch.name == switch_name).first()
+    oid = sw.oid
+    cmd = "snmpwalk -v2c -c %s %s %s" % (sw.community, sw.ip, oid[:oid.rindex(".")])
+    close_session(db)
     process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
     power_state = process.stdout.split("\n")
     return [p[-1] for p in power_state if len(p) > 0]
 
 
 def set_power_port(switch_name, port, value):
-    props = switch_props(switch_name)
-    snmp_address = "%s.%d" % (props["oid"], int(props["oid_offset"]) + int(port))
-    cmd = "snmpset -v2c -c %s %s %s i %s" % (props["community"], props["ip"], snmp_address, value)
+    db = open_session()
+    sw = db.query(RaspSwitch).filter(RaspSwitch.name == switch_name).first()
+    snmp_address = "%s.%d" % (sw.oid, sw.oid_offset + int(port))
+    cmd = "snmpset -v2c -c %s %s %s i %s" % (sw.community, sw.ip, snmp_address, value)
+    close_session(db)
     subprocess.run(cmd.split(), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return True
 

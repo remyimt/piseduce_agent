@@ -8,6 +8,13 @@ from lib.config_loader import get_config
 import json, logging, os, pytz, subprocess, time
 
 
+# The required properties to configure the iot-lab nodes from the configure panel
+CONFIGURE_PROP = {
+    "firmware": { "values": [], "mandatory": false },
+    "profile": { "values": [], "mandatory": false }
+}
+
+
 def experiment_to_reservation():
     reservations = {}
     # Get the reservations from the IoT-Lab plateform
@@ -109,11 +116,10 @@ def node_configure(arg_dict):
         })
     result = {}
     # Common properties to every kind of nodes
-    config = get_config()
     conf_prop = {
         "node_bin": { "values": [], "mandatory": True },
     }
-    conf_prop.update(config["configure_prop"][config["node_type"]])
+    conf_prop.update(CONFIGURE_PROP)
     # Get the available firmwares
     conf_prop["firmware"]["values"] = []
     conf_prop["firmware"]["values"].append("")

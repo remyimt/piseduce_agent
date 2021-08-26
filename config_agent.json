@@ -8,41 +8,5 @@
     "key_file": "secret.key",
     "db_url": "sqlite:///test-agent.db",
     "comments": "Do not forget the ending '/' at the end of the env_path",
-    "env_path": "/root/environments/",
-    "comments": "Common required properties to add nodes to raspberry agents",
-    "node_prop": [
-        "name", "ip"
-    ],
-    "comments": "Required properties to add raspberry nodes",
-    "raspberry_prop": [
-        "port_number", "switch", "model", "serial"
-    ],
-    "comments": "Required properties to add DHCP clients in the dnsmasq configuration",
-    "client_prop": [
-        "name", "ip", "mac_address" 
-    ],
-    "comments": "Required properties to add switches to raspberry agents",
-    "switch_prop": [
-        "name", "ip", "community", "master_port", "oid_first_port" 
-    ],
-    "comments": "Required properties to add environments to raspberry agents",
-    "env_prop": [
-        "name", "img_name", "img_size", "sector_start", "ssh_user", "web"
-    ],
-    "comments": "Properties to configure deployments according to the agent type",
-    "configure_prop": {
-        "raspberry": {
-            "update_os": { "values": [ "no", "yes" ], "mandatory": true },
-            "part_size": { "values": [ "whole", "2gb", "5gb", "10gb" ], "mandatory": true },
-            "os_password": { "values": [], "mandatory": false },
-            "form_ssh_key": { "values": [], "mandatory": false }
-        },
-        "iot-lab": {
-            "firmware": { "values": [], "mandatory": false },
-            "profile": { "values": [], "mandatory": false }
-        },
-        "g5k": {
-            "form_ssh_key": { "values": [], "mandatory": false }
-        }
-    }
+    "env_path": "/root/environments/"
 }

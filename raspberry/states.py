@@ -40,12 +40,11 @@ PROCESS = {
             ]
         }
     ],
-    'save_env': [
+    'reg_env': [
         {
             'environments': [],
             'states': [
-                'img_part', 'img_format', 'img_copy', 'img_copy_check', 'img_customize',
-                'img_compress', 'img_compress_check', 'upload', 'upload_check', 'deployed'
+                'uncompress', 'read_info', 'img_upload', 'update_db', 'deployed'
             ]
         }
     ]
@@ -60,8 +59,8 @@ STATE_DESC = {
     'boot_conf': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'turn_off': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'turn_on': { 'exec': True, 'post': True, 'before_reboot': 60, 'lost': 90 },
-    # First boot of ubuntu system can be very long
-    'ssh_test': { 'exec': False, 'post': True, 'before_reboot': 150, 'lost': 180 },
+    # First boot of tinycore system can be very long
+    'ssh_test': { 'exec': False, 'post': True, 'before_reboot': 300, 'lost': 330 },
     'env_copy': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 30 },
     'env_check': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 400 },
     'delete_partition': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
@@ -87,13 +86,8 @@ STATE_DESC = {
     # Final state: exec is False, post is False and the 2 timeouts are infinite (0)
     'booted': { 'exec': False, 'post': False, 'before_reboot': 0, 'lost': 0 },
 
-    'img_part': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_format': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_copy': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_copy_check': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_customize': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_compress': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_compress_check': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'upload': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'upload_check': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 }
+    'uncompress': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
+    'read_info': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
+    'img_upload': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
+    'update_db': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 }
 }

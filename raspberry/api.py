@@ -1,5 +1,5 @@
 from api.tool import safe_string
-from database.connector import open_session, close_session, row2props
+from database.connector import open_session, close_session
 from database.tables import Action, ActionProperty, RaspEnvironment, RaspNode, Schedule, RaspSwitch
 from importlib import import_module
 from lib.config_loader import get_config
@@ -8,13 +8,21 @@ from agent_exec import free_reserved_node, new_action, init_action_process, save
 import json, logging, time
 
 
+# The required properties to configure the Raspberry nodes from the configure panel
+CONFIGURE_PROP = {
+    "update_os": { "values": [ "no", "yes" ], "mandatory": True },
+    "part_size": { "values": [ "whole", "2gb", "5gb", "10gb" ], "mandatory": True },
+    "os_password": { "values": [], "mandatory": False },
+    "form_ssh_key": { "values": [], "mandatory": False }
+}
+
+
 # Add the environments to the configuration
 def load_environments():
     db = open_session()
     env_names = [name[0] for name in db.query(distinct(RaspEnvironment.name)).all()]
     close_session(db)
-    config = get_config()
-    config["configure_prop"][config["node_type"]]["environment"] = { "values": env_names, "mandatory": True }
+    CONFIGURE_PROP["environment"] = { "values": env_names, "mandatory": True }
 
 
 def client_list(arg_dict):
@@ -29,15 +37,42 @@ def client_list(arg_dict):
     return json.dumps(result)
 
 
+def register_environment(arg_dict):
+    env_props = [str(c).split(".")[1] for c in RaspEnvironment.__table__.columns]
+    # Check if all properties belong to the POST data
+    missing_data = dict([(key_data, []) for key_data in env_props if key_data not in arg_dict.keys()])
+    if len(missing_data) == 0:
+        db = open_session()
+        existing = db.query(RaspEnvironment).filter(RaspEnvironment.name == arg_dict["name"]).all()
+        for to_del in existing:
+            db.delete(to_del)
+        new_env = RaspEnvironment()
+        new_env.name = arg_dict["name"]
+        new_env.img_name = arg_dict["img_name"]
+        new_env.img_size = arg_dict["img_size"]
+        new_env.sector_start = arg_dict["sector_start"]
+        new_env.ssh_user = arg_dict["ssh_user"]
+        if arg_dict["web"] == "true" or arg_dict["web"] == "True" or arg_dict["web"] == 1:
+            new_env.web = True
+        else:
+            new_env.web = False
+        db.add(new_env)
+        close_session(db)
+        load_environments()
+        return json.dumps({ "environment": arg_dict["name"] })
+    else:
+        return json.dumps({ "missing": missing_data })
+
+
 def environment_list(arg_dict):
     db = open_session()
     # Get the environments
     result = {}
-    envs = db.query(RaspEnvironment).all()
-    for e in envs:
-        if e.name not in result:
-            result[e.name] = {}
-        result[e.name][e.prop_name] = e.prop_value
+    for e in db.query(RaspEnvironment).all():
+        result[e.name] = {}
+        for col_name in RaspEnvironment.__table__.columns:
+            name_str = str(col_name).split(".")[1]
+            result[e.name][name_str] = getattr(e, name_str)
     close_session(db)
     return json.dumps(result)
 
@@ -51,21 +86,15 @@ def node_configure(arg_dict):
         "node_bin": { "values": [], "mandatory": True },
         "environment": { "values": [], "mandatory": True },
     }
+    conf_prop.update(CONFIGURE_PROP)
     # DB connection
     db = open_session()
-    # List the existing environments
-    envs = db.query(RaspEnvironment).filter(RaspEnvironment.prop_name == "web").all()
-    for env in envs:
-        conf_prop["environment"]["values"].append(env.name)
     # Get the nodes in the 'configuring' state
     nodes = db.query(Schedule
             ).filter(Schedule.owner == arg_dict["user"]
             ).filter(Schedule.state == "configuring"
             ).all()
     for n in nodes:
-        if len(conf_prop) == 2:
-            node_type = get_config()["node_type"]
-            conf_prop.update(get_config()["configure_prop"][node_type])
         result[n.node_name] = conf_prop.copy()
         result[n.node_name]["start_date"] = n.start_date
         result[n.node_name]["end_date"] = n.end_date
@@ -89,8 +118,7 @@ def node_deploy(arg_dict):
     else:
         return json.dumps(error_msg)
     # Get the list of properties for the configuration
-    node_type = get_config()["node_type"]
-    conf_prop = get_config()["configure_prop"][node_type]
+    conf_prop = CONFIGURE_PROP.copy()
     # Get the node with the 'configuring' state
     result = {}
     db = open_session()
@@ -302,10 +330,11 @@ def node_list(arg_dict):
     result = {}
     db = open_session()
     # Get the node properties
-    for p in db.query(RaspNode).filter(RaspNode.node_name != "pimaster").all():
-        if p.node_name not in result:
-            result[p.node_name] = {}
-        result[p.node_name][p.prop_name] = p.prop_value
+    for node in db.query(RaspNode).filter(RaspNode.name != "pimaster").all():
+        result[node.name] = {}
+        for col_name in RaspNode.__table__.columns:
+            name_str = str(col_name).split(".")[1]
+            result[node.name][name_str] = getattr(node, name_str)
     close_session(db)
     return json.dumps(result)
 
@@ -336,9 +365,13 @@ def node_mine(arg_dict):
             "state": n.state,
             "action_state": n.action_state
         }
-    props = db.query(RaspNode).filter(RaspNode.node_name.in_(result["nodes"].keys())).all()
-    for p in props:
-        result["nodes"][p.node_name][p.prop_name] = p.prop_value
+    nodes = db.query(RaspNode).filter(RaspNode.name.in_(result["nodes"].keys())).all()
+    for n in nodes:
+        result["nodes"][n.name]["ip"] = n.ip
+        result["nodes"][n.name]["switch"] = n.switch
+        result["nodes"][n.name]["port_number"] = n.port_number
+        result["nodes"][n.name]["model"] = n.model
+        result["nodes"][n.name]["serial"] = n.serial
     envs = db.query(ActionProperty
         ).filter(ActionProperty.node_name.in_(result["nodes"].keys())
         ).filter(ActionProperty.prop_name.in_(["environment", "os_password"])
@@ -349,9 +382,9 @@ def node_mine(arg_dict):
             # Check if the environment provides a web interface
             if e.prop_value not in env_web:
                 has_web = db.query(RaspEnvironment).filter(RaspEnvironment.name == e.prop_value
-                    ).filter(RaspEnvironment.prop_name == "web").first().prop_value
+                    ).first().web
                 env_web[e.prop_value] = has_web
-            if env_web[e.prop_value] == "true":
+            if env_web[e.prop_value]:
                 #result["nodes"][e.node_name]["url"] = "http://%s:8181" % result["nodes"][e.node_name]["ip"]
                 # Hack for the PiSeduce cluster
                 result["nodes"][e.node_name]["url"] = "https://pi%02d.seduce.fr" % (
@@ -383,27 +416,29 @@ def node_reserve(arg_dict):
     filtered_nodes = []
     if "name" in f:
         # RaspNode names are unique identifiers
-        node = db.query(RaspNode).filter(RaspNode.node_name == f["name"]).first()
+        node = db.query(RaspNode).filter(RaspNode.name == f["name"]).first()
+        # Check the node is managed by this agent
         if node is not None:
-            filtered_nodes.append(node.node_name)
+            filtered_nodes.append(node.name)
     else:
         # Get the node properties used in the filter
         node_props = {}
         if len(f) == 0:
             nodes = db.query(RaspNode).all()
         else:
-            nodes = db.query(RaspNode).filter(RaspNode.prop_name.in_(f.keys())).all()
-        for prop in nodes:
-            if prop.node_name not in node_props:
-                node_props[prop.node_name] = {}
-            node_props[prop.node_name][prop.prop_name] = prop.prop_value
-        for node_name in node_props:
-            ok_filtered = True
-            for prop in f:
-                if node_props[node_name][prop] != f[prop]:
-                    ok_filtered = False
-            if ok_filtered:
-                filtered_nodes.append(node_name)
+            query = db.query(RaspNode)
+            wrong_filter = False
+            for prop_filter in f:
+                if hasattr(RaspNode, prop_filter):
+                    query = query.filter(getattr(RaspNode, prop_filter) == f[prop_filter])
+                else:
+                    wrong_filter = True
+            if wrong_filter:
+                nodes = []
+            else:
+                nodes = query.all()
+        for n in nodes:
+            filtered_nodes.append(n.name)
     # Check the availability of the filtered nodes
     logging.warning("Filtered nodes: %s" % filtered_nodes)
     selected_nodes = []
@@ -510,11 +545,11 @@ def switch_list(arg_dict):
     db = open_session()
     # Get the switches
     result = {}
-    switches = db.query(RaspSwitch).all()
-    for s in switches:
-        if s.name not in result:
-            result[s.name] = {}
-        result[s.name][s.prop_name] = s.prop_value
+    for s in db.query(RaspSwitch).all():
+        result[s.name] = {}
+        for col_name in RaspSwitch.__table__.columns:
+            name_str = str(col_name).split(".")[1]
+            result[s.name][name_str] = getattr(s, name_str)
     close_session(db)
     return json.dumps(result)
 

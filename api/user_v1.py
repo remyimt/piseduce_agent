@@ -51,6 +51,20 @@ def switch_list():
     return getattr(api_exec_mod, "switch_list")(flask.request.json)
 
 
+@user_v1.route("/environment/register", methods=["POST"])
+@auth
+def register_environment():
+    """
+    Register the environment that belongs to the Raspberry specified in the parameters.
+    JSON parameters: 'node_name', 'img_path', 'env_name'.
+    Example of return value:
+    {
+        'environment': 'env_name'
+    }
+    """
+    return getattr(api_exec_mod, "register_environment")(flask.request.json)
+
+
 # List the environments (only used by administrators but the URL must be in /user/)
 @user_v1.route("/environment/list", methods=["POST"])
 @auth

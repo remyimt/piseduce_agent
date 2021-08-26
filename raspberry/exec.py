@@ -1,4 +1,3 @@
-from database.connector import row2props
 from database.tables import ActionProperty, RaspNode, RaspEnvironment
 from datetime import datetime
 from glob import glob
@@ -30,9 +29,7 @@ def new_password(stringLength=8):
 
 # States of the 'deploy' process (deploy environments)
 def boot_conf_exec(action, db):
-    serial = db.query(RaspNode
-            ).filter(RaspNode.node_name  == action.node_name
-            ).filter(RaspNode.prop_name == "serial").first().prop_value
+    serial = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first().serial
     # Create a folder containing network boot files that will be served via TFTP
     tftpboot_template_folder = "/tftpboot/rpiboot_uboot"
     tftpboot_node_folder = "/tftpboot/%s" % serial
@@ -45,41 +42,30 @@ def boot_conf_exec(action, db):
 
 
 def turn_off_exec(action, db):
-    node_prop = row2props(db.query(RaspNode
-        ).filter(RaspNode.node_name  == action.node_name
-        ).filter(RaspNode.prop_name.in_(["switch", "port_number"])).all())
+    node = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first()
     # Turn off port
-    turn_off_port(node_prop["switch"], node_prop["port_number"])
+    turn_off_port(node.switch, node.port_number)
     return True
 
 
 def turn_on_exec(action, db):
-    node_prop = row2props(db.query(RaspNode
-        ).filter(RaspNode.node_name  == action.node_name
-        ).filter(RaspNode.prop_name.in_(["switch", "port_number"])).all())
+    node = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first()
     # Turn on port
-    turn_on_port(node_prop["switch"], node_prop["port_number"])
+    turn_on_port(node.switch, node.port_number)
     return True
 
 
 def turn_on_post(action, db):
-    node_ip = db.query(RaspNode
-            ).filter(RaspNode.node_name  == action.node_name
-            ).filter(RaspNode.prop_name == "ip").first().prop_value
+    node_ip = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first().ip
     cmd = "ping -W 1 -c 1 %s" % node_ip
     subproc = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return subproc.returncode == 0
 
 
 def ssh_test_post(action, db):
-    node_ip = db.query(RaspNode
-            ).filter(RaspNode.node_name  == action.node_name
-            ).filter(RaspNode.prop_name == "ip").first().prop_value
+    node_ip = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first().ip
     # By default, we use the ssh_user of the environment. We assume the environment is deployed
-    ssh_user = db.query(RaspEnvironment
-        ).filter(RaspEnvironment.name  == action.environment
-        ).filter(RaspEnvironment.prop_name == "ssh_user"
-        ).first().prop_value
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name == action.environment).first().ssh_user
     expected_hostname = action.node_name
     # Check if the node boots from the NFS filesystem
     if action.process == "deploy":
@@ -113,22 +99,21 @@ def ssh_test_post(action, db):
 
 def env_copy_exec(action, db):
     env_path = get_config()["env_path"]
-    node_ip = db.query(RaspNode
-            ).filter(RaspNode.node_name  == action.node_name
-            ).filter(RaspNode.prop_name == "ip").first().prop_value
-    pimaster_prop = row2props(db.query(RaspNode).filter(RaspNode.node_name  == "pimaster").all())
-    env_prop = row2props(db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).all())
+    node_ip = db.query(RaspNode).filter(RaspNode.name == action.node_name).first().ip
+    # WARN: the pimaster SSH user is in pimaster.switch (sorry)
+    pimaster = db.query(RaspNode).filter(RaspNode.name == "pimaster").first()
+    env = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).first()
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(node_ip, username = "root", timeout = SSH_TIMEOUT)
         # Get the path to the IMG file
-        img_path = env_path + env_prop["img_name"]
+        img_path = env_path + env.img_name
         logging.info("[%s] copy %s to the SDCARD" % (action.node_name, img_path))
         # Write the image of the environment on SD card
         deploy_cmd = "rsh -o StrictHostKeyChecking=no %s@%s 'cat %s' | tar xzOf - | \
             pv -n -p -s %s 2> progress-%s.txt | dd of=/dev/mmcblk0 bs=4M conv=fsync &" % (
-            pimaster_prop["master_user"], pimaster_prop["master_ip"], img_path, env_prop["img_size"], action.node_name)
+            pimaster.switch, pimaster.ip, img_path, env.img_size, action.node_name)
         (stdin, stdout, stderr) = ssh.exec_command(deploy_cmd)
         return_code = stdout.channel.recv_exit_status()
         ssh.close()
@@ -168,9 +153,7 @@ def env_copy_post(action, db):
 
 def env_check_exec(action, db):
     ret_fct = False
-    img_size = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment
-        ).filter(RaspEnvironment.prop_name  == "img_size"
-        ).first().prop_value
+    img_size = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).first().img_size
     percent_prop = db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name  == "percent"
@@ -226,18 +209,15 @@ def delete_partition_exec(action, db):
 
 def create_partition_exec(action, db):
     sector_start = db.query(RaspEnvironment
-        ).filter(RaspEnvironment.name  == action.environment
-        ).filter(RaspEnvironment.prop_name  == "sector_start"
-        ).first().prop_value
-    act_prop = row2props(db.query(ActionProperty
+        ).filter(RaspEnvironment.name  == action.environment).first().sector_start
+    size_str = db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name == "part_size"
-        ).all())
+        ).first().prop_value
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
-        size_str = act_prop["part_size"]
         if "gb" in size_str:
             part_size = int(size_str.replace("gb", "")) * 1024
             # Total size of the new partition in sectors (512B)
@@ -450,10 +430,7 @@ def system_conf_exec(action, db):
 
 
 def boot_files_exec(action, db):
-    serial = db.query(RaspNode
-        ).filter(RaspNode.node_name  == action.node_name
-        ).filter(RaspNode.prop_name == "serial"
-        ).first().prop_value
+    serial = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first().serial
     # Copy boot files to the tftp directory
     tftpboot_node_folder = "/tftpboot/%s" % serial
     # Delete the existing tftp directory
@@ -494,10 +471,7 @@ def system_update_exec(action, db):
         logging.info("[%s] the OS update is disabled" % action.node_name)
         return True
     # Update the operating system
-    ssh_user = db.query(RaspEnvironment
-        ).filter(RaspEnvironment.name  == action.environment
-        ).filter(RaspEnvironment.prop_name == "ssh_user"
-        ).first().prop_value
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).first().ssh_user
     if action.environment.startswith("raspbian") or action.environment.startswith("ubuntu"):
         try:
             ssh = paramiko.SSHClient()
@@ -531,10 +505,7 @@ def system_update_post(action, db):
         # Do not update the operating system
         return True
     # Update the operating system
-    ssh_user = db.query(RaspEnvironment
-        ).filter(RaspEnvironment.name  == action.environment
-        ).filter(RaspEnvironment.prop_name == "ssh_user"
-        ).first().prop_value
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).first().ssh_user
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -564,14 +535,8 @@ def boot_update_exec(action, db):
     if update_os == "no":
         # The operating system is not updated => do not update the boot files
         return True
-    ssh_user = db.query(RaspEnvironment
-        ).filter(RaspEnvironment.name  == action.environment
-        ).filter(RaspEnvironment.prop_name == "ssh_user"
-        ).first().prop_value
-    serial = db.query(RaspNode
-        ).filter(RaspNode.node_name  == action.node_name
-        ).filter(RaspNode.prop_name == "serial"
-        ).first().prop_value
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).first().ssh_user
+    serial = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first().serial
     # Copy boot files to the tftp directory
     tftpboot_node_folder = "/tftpboot/%s" % serial
     # Delete the existing tftp directory
@@ -599,14 +564,21 @@ def boot_update_exec(action, db):
 
 
 def user_conf_exec(action, db):
-    act_prop = row2props(db.query(ActionProperty
+    act_prop = db.query(ActionProperty
         ).filter(ActionProperty.node_name  == action.node_name
         ).filter(ActionProperty.prop_name.in_(["os_password", "form_ssh_key", "account_ssh_key" ])
-        ).all())
-    ssh_user = db.query(RaspEnvironment
-        ).filter(RaspEnvironment.name  == action.environment
-        ).filter(RaspEnvironment.prop_name == "ssh_user"
-        ).first().prop_value
+        ).all()
+    os_password = None
+    form_ssh_key = None
+    account_ssh_key = None
+    for prop in act_prop:
+        if prop.prop_name == "os_password":
+            os_password = prop.prop_value
+        elif prop.prop_name == "form_ssh_key":
+            form_ssh_key = prop.prop_value
+        elif prop.prop_name == "account_ssh_key":
+            account_ssh_key = prop.prop_value
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).first().ssh_user
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -614,13 +586,13 @@ def user_conf_exec(action, db):
         # Get the user SSH key from the DB
         my_ssh_keys = ""
         # Copy the SSH key provided in the configuring form
-        if "form_ssh_key" in act_prop and len(act_prop["form_ssh_key"]) > 256:
-            my_ssh_keys = "%s" % act_prop["form_ssh_key"]
-        if "account_ssh_key" in act_prop and len(act_prop["account_ssh_key"]) > 256:
+        if form_ssh_key is not None and len(form_ssh_key) > 256:
+            my_ssh_keys = form_ssh_key
+        if account_ssh_key is not None and len(account_ssh_key) > 256:
             if len(my_ssh_keys) == 0:
-                my_ssh_keys = "%s" % act_prop["account_ssh_key"]
+                my_ssh_keys = account_ssh_key
             else:
-                my_ssh_keys = "%s\n%s" % (my_ssh_keys, act_prop["account_ssh_key"])
+                my_ssh_keys = "%s\n%s" % (my_ssh_keys, account_ssh_key)
         if len(my_ssh_keys) > 0:
             # Add the public key of the user
             cmd = "echo '%s' >> .ssh/authorized_keys" % my_ssh_keys
@@ -628,13 +600,12 @@ def user_conf_exec(action, db):
             return_code = stdout.channel.recv_exit_status()
         if action.environment == "tiny_core":
             # Change the 'tc' user password
-            cmd = "echo -e '%s\n%s' | sudo passwd tc; filetool.sh -b" % (
-                    act_prop["os_password"], act_prop["os_password"])
+            cmd = "echo -e '%s\n%s' | sudo passwd tc; filetool.sh -b" % (os_password, os_password)
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
         if action.environment.startswith("raspbian"):
             # Change the 'pi' user password
-            cmd = "echo -e '%s\n%s' | passwd pi" % (act_prop["os_password"], act_prop["os_password"])
+            cmd = "echo -e '%s\n%s' | passwd pi" % (os_password, os_password)
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
         ssh.close()
@@ -646,26 +617,20 @@ def user_conf_exec(action, db):
 
 # Destroying deployments
 def destroying_exec(action, db):
-    node_prop = row2props(db.query(RaspNode
-        ).filter(RaspNode.node_name  == action.node_name
-        ).filter(RaspNode.prop_name.in_(["model", "serial" ])
-        ).all())
+    node = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first()
     if action.environment is not None:
-        ssh_user_db = db.query(RaspEnvironment
-            ).filter(RaspEnvironment.name  == action.environment
-            ).filter(RaspEnvironment.prop_name == "ssh_user"
-            ).first()
+        ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name  == action.environment).first().ssh_user
         # When destroying initialized deployments, the environment is unset
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        if node_prop["model"].startswith("RPI3"):
+        if node.model.startswith("RPI3"):
             # Delete the bootcode.bin file
             try:
                 cmd = "rm /boot/bootcode.bin && sync"
                 if action.environment.startswith("ubuntu"):
                     cmd = "rm /boot/firmware/bootcode.bin && sync"
                 # Try to connect to the deployed environment
-                ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
+                ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
                 (stdin, stdout, stderr) = ssh.exec_command(cmd)
                 return_code = stdout.channel.recv_exit_status()
                 ssh.close()
@@ -685,11 +650,11 @@ def destroying_exec(action, db):
                     ssh.close()
                 except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
                     logging.info("[%s] can not connect to the NFS environment" % action.node_name)
-        if node_prop["model"].startswith("RPI4"):
+        if node.model.startswith("RPI4"):
             # Check the booloader configuration (netboot)
             try:
                 # Try to connect to the deployed environment
-                ssh.connect(action.node_ip, username = ssh_user_db.prop_value, timeout = SSH_TIMEOUT)
+                ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
                 # Check the booted system is the NFS system
                 (stdin, stdout, stderr) = ssh.exec_command("cat /etc/hostname")
                 return_code = stdout.channel.recv_exit_status()
@@ -711,7 +676,7 @@ def destroying_exec(action, db):
             except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
                 logging.info("[%s] can not connect to the deployed environment" % action.node_name)
     # Delete the tftpboot folder
-    tftpboot_node_folder = "/tftpboot/%s" % node_prop["serial"]
+    tftpboot_node_folder = "/tftpboot/%s" % node.serial
     if os.path.isdir(tftpboot_node_folder):
         shutil.rmtree(tftpboot_node_folder)
     return True
