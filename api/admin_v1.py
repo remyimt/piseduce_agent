@@ -90,6 +90,37 @@ def rename_nodes():
         return json.dumps({ "error": error })
 
 
+# Add a Raspberry environment to the database
+@admin_v1.route("/add/environment", methods=["POST"])
+@auth
+def add_environment():
+    json_data = flask.request.json
+    env_props = [str(c).split(".")[1] for c in RaspEnvironment.__table__.columns]
+    # Check if all properties belong to the POST data
+    missing_data = dict([(key_data, []) for key_data in env_props if key_data not in json_data.keys()])
+    if len(missing_data) == 0:
+        db = open_session()
+        existing = db.query(RaspEnvironment).filter(RaspEnvironment.name == json_data["name"]).all()
+        for to_del in existing:
+            db.delete(to_del)
+        new_env = RaspEnvironment()
+        new_env.name = json_data["name"]
+        new_env.img_name = json_data["img_name"]
+        new_env.img_size = json_data["img_size"]
+        new_env.sector_start = json_data["sector_start"]
+        new_env.ssh_user = json_data["ssh_user"]
+        if json_data["web"] == "true" or json_data["web"] == "True" or json_data["web"] == 1:
+            new_env.web = True
+        else:
+            new_env.web = False
+        db.add(new_env)
+        close_session(db)
+        #TODO reload the environments
+        return json.dumps({ "environment": json_data["name"] })
+    else:
+        return json.dumps({ "missing": missing_data })
+
+
 # Add DHCP clients to the dnsmasq configuration
 @admin_v1.route("/add/client", methods=["POST"])
 @auth

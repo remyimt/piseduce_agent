@@ -38,31 +38,7 @@ def client_list(arg_dict):
 
 
 def register_environment(arg_dict):
-    env_props = [str(c).split(".")[1] for c in RaspEnvironment.__table__.columns]
-    # Check if all properties belong to the POST data
-    missing_data = dict([(key_data, []) for key_data in env_props if key_data not in arg_dict.keys()])
-    if len(missing_data) == 0:
-        db = open_session()
-        existing = db.query(RaspEnvironment).filter(RaspEnvironment.name == arg_dict["name"]).all()
-        for to_del in existing:
-            db.delete(to_del)
-        new_env = RaspEnvironment()
-        new_env.name = arg_dict["name"]
-        new_env.img_name = arg_dict["img_name"]
-        new_env.img_size = arg_dict["img_size"]
-        new_env.sector_start = arg_dict["sector_start"]
-        new_env.ssh_user = arg_dict["ssh_user"]
-        if arg_dict["web"] == "true" or arg_dict["web"] == "True" or arg_dict["web"] == 1:
-            new_env.web = True
-        else:
-            new_env.web = False
-        db.add(new_env)
-        close_session(db)
-        load_environments()
-        return json.dumps({ "environment": arg_dict["name"] })
-    else:
-        return json.dumps({ "missing": missing_data })
-
+    return json.dumps({})
 
 def environment_list(arg_dict):
     db = open_session()
