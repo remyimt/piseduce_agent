@@ -76,6 +76,7 @@ class RaspEnvironment(Base):
     sector_start = Column(Integer)
     ssh_user = Column(Text)
     web = Column(Boolean)
+    state = Column(Text, nullable=False)
 
 
 # Table for IoT-Lab agents

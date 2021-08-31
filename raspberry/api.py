@@ -5,7 +5,7 @@ from importlib import import_module
 from lib.config_loader import get_config
 from sqlalchemy import distinct, and_, or_
 from agent_exec import free_reserved_node, new_action, init_action_process, save_reboot_state
-import json, logging, time
+import json, logging, os, time
 
 
 # The required properties to configure the Raspberry nodes from the configure panel
@@ -38,7 +38,52 @@ def client_list(arg_dict):
 
 
 def register_environment(arg_dict):
-    return json.dumps({})
+    db = open_session()
+    node = db.query(Schedule
+            ).filter(Schedule.node_name == arg_dict["node_name"]
+            ).filter(Schedule.owner == arg_dict["user"]
+            ).first()
+    if node is None:
+        close_session(db)
+        msg = "No reservation for the node '%s'" % arg_dict["node_name"]
+        logging.error("[%s] %s" % (arg_dict["node_name"], msg))
+        return json.dumps({ "error": msg })
+    # Check the image file does not exist yet
+    file_name = os.path.basename(arg_dict["img_path"])
+    env_path = get_config()["env_path"]
+    if os.path.exists("%s%s" % (env_path, file_name)):
+        msg = "The image file '%s' already exists in the server. Please, rename this file." % file_name
+        logging.error("[%s] %s" % (arg_dict["node_name"], msg))
+        return json.dumps({ "error": msg })
+    node_action = db.query(Action).filter(Action.node_name == node.node_name).first()
+    if node_action is not None:
+        db.delete(node_action)
+    # The deployment is completed, add a new action
+    node_action = new_action(node, db)
+    # The deployment is completed, add a new action
+    init_action_process(node_action, "reg_env")
+    db.add(node_action)
+    # Delete old values
+    old_props = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == node.node_name
+        ).filter(ActionProperty.prop_name.in_(["img_path", "env_name" ])
+        ).all()
+    for p in old_props:
+        db.delete(p)
+    act_prop = ActionProperty()
+    act_prop.node_name = node.node_name
+    act_prop.prop_name = "img_path"
+    act_prop.prop_value = arg_dict["img_path"]
+    act_prop.owner = node.owner
+    db.add(act_prop)
+    act_prop = ActionProperty()
+    act_prop.node_name = node.node_name
+    act_prop.prop_name = "env_name"
+    act_prop.prop_value = arg_dict["env_name"]
+    act_prop.owner = node.owner
+    db.add(act_prop)
+    close_session(db)
+    return json.dumps({ "success": "environment is registering" })
 
 def environment_list(arg_dict):
     db = open_session()

@@ -680,3 +680,158 @@ def destroying_exec(action, db):
     if os.path.isdir(tftpboot_node_folder):
         shutil.rmtree(tftpboot_node_folder)
     return True
+
+
+# Register environments
+def uncompress_exec(action, db):
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name == action.environment).first().ssh_user
+    img_path = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == action.node_name
+        ).filter(ActionProperty.prop_name == "img_path").first().prop_value
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
+        cmd = "ls -l %s" % img_path
+        (stdin, stdout, stderr) = ssh.exec_command(cmd)
+        return_code = stdout.channel.recv_exit_status()
+        if len(stdout.readlines()) == 0:
+            logging.error("[%s] No file '%s'" % (action.node_name, img_path))
+            return False
+        cmd = "rm new_env.img; tar xf %s &" % img_path
+        logging.error(cmd)
+        (stdin, stdout, stderr) = ssh.exec_command(cmd)
+        return_code = stdout.channel.recv_exit_status()
+        ssh.close()
+        return True
+    except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
+        logging.warning("[%s] SSH connection failed" % action.node_name)
+    return False
+
+
+def uncompress_post(action, db):
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name == action.environment).first().ssh_user
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
+        ret_fct = False
+        if ps_ssh(ssh, "tar") == 0:
+            ret_fct = True
+        ssh.close()
+        return ret_fct
+    except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
+        logging.warning("[%s] SSH connection failed" % action.node_name)
+    return False
+
+def read_info_exec(action, db):
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name == action.environment).first().ssh_user
+    act_prop = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == action.node_name
+        ).filter(ActionProperty.prop_name.in_(["img_path", "env_name"])
+        ).all()
+    for prop in act_prop:
+        if prop.prop_name == "img_path":
+            img_path = prop.prop_value
+        else:
+            env_name = prop
+    file_name = os.path.basename(img_path)
+    img_name = file_name.replace(".tar.gz", "")
+    prefix = None
+    ssh_user = None
+    img_size = None
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
+        # Retrieve the first sector number of the second partition
+        cmd = "fdisk -l %s" % img_name
+        (stdin, stdout, stderr) = ssh.exec_command(cmd)
+        return_code = stdout.channel.recv_exit_status()
+        output = stdout.readlines()
+        if len(output) > 9:
+            first_sector = int(output[9].split()[1])
+            if first_sector in [ 532480 ]:
+                prefix = "raspbian_"
+                ssh_user = "root"
+            elif first_sector in [ 526336 ]:
+                prefix = "ubuntu_"
+                ssh_user = "root"
+            elif first_sector in [ 195693 ]:
+                prefix = "picore_"
+                ssh_user = "tc"
+            else:
+                logging.error("[%s] Unknown sector_start %d" % (action.node_name, sector_start))
+        else:
+            logging.error("[%s] Wrong fdisk output '%s'" % (action.node_name, output))
+        if prefix is None:
+            return False
+        else:
+            # Retrieve the size of the uncompressed image
+            cmd = "ls -l %s" % img_name
+            (stdin, stdout, stderr) = ssh.exec_command(cmd)
+            return_code = stdout.channel.recv_exit_status()
+            output = stdout.readlines()[0].split()
+            if len(output) > 7:
+                img_size = int(output[4])
+                # Add the environment to the database
+                new_env_name = "%s%s" % (prefix, env_name.prop_value)
+                env_name.prop_value = new_env_name
+                existing = db.query(RaspEnvironment).filter(RaspEnvironment.name == new_env_name).first()
+                if existing is not None:
+                    db.delete(existing)
+                new_env = RaspEnvironment()
+                new_env.name = new_env_name
+                new_env.img_name = file_name
+                new_env.img_size = img_size
+                new_env.sector_start = first_sector
+                new_env.ssh_user = ssh_user
+                new_env.web = False
+                new_env.state = "uploading"
+                db.add(new_env)
+                return True
+            else:
+                logging.error("[%s] wrong 'ls' return: can not read the image size" % action.node_name)
+                return False
+    except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
+        logging.warning("[%s] SSH connection failed" % action.node_name)
+    return False
+
+
+def img_upload_exec(action, db):
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name == action.environment).first().ssh_user
+    env_path = get_config()["env_path"]
+    img_path = db.query(ActionProperty
+        ).filter(ActionProperty.node_name == action.node_name
+        ).filter(ActionProperty.prop_name == "img_path").first().prop_value
+    cmd = "scp -o 'StrictHostKeyChecking no' root@%s:%s %s" % (action.node_ip, img_path, env_path)
+    subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return True
+
+
+def img_upload_post(action, db):
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name == action.environment).first().ssh_user
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(action.node_ip, username = ssh_user, timeout = SSH_TIMEOUT)
+        ret_fct = False
+        if ps_ssh(ssh, "scp") == 0:
+            # Delete the action properties
+            act_prop = db.query(ActionProperty
+                ).filter(ActionProperty.node_name == action.node_name
+                ).filter(ActionProperty.prop_name.in_(["img_path", "env_name"])
+                ).all()
+            for prop in act_prop:
+                if prop.prop_name == "env_name":
+                    env_name = prop.prop_value
+                db.delete(prop)
+            # Update the environment state
+            env = db.query(RaspEnvironment).filter(RaspEnvironment.name == env_name).first()
+            env.state = "available"
+            ret_fct = True
+        ssh.close()
+        return ret_fct
+    except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
+        logging.warning("[%s] SSH connection failed" % action.node_name)
+    return False

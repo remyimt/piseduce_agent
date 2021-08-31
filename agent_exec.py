@@ -246,15 +246,15 @@ if __name__ == "__main__":
             now = int(time.time())
             for node in db.query(Schedule).filter(Schedule.end_date < now).all():
                 logging.info("[%s] Destroy the expired reservation (expired date: %s)" % (
-                    node.name, datetime.fromtimestamp(node.end_date)))
+                    node.node_name, datetime.fromtimestamp(node.end_date)))
                 # The reservation is expired, delete it
                 if node.state == "configuring":
                     # The node is not deployed
-                    free_reserved_node(db, node.name)
+                    free_reserved_node(db, node.node_name)
                 else:
                     # Check if a destroy action is in progress
                     destroy_action = db.query(Action
-                        ).filter(Action.node_name == node.name
+                        ).filter(Action.node_name == node.node_name
                         ).filter(Action.process == "destroy").all()
                     if len(destroy_action) == 0:
                         node_action = new_action(node, db)

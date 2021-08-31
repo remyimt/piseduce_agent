@@ -44,7 +44,7 @@ PROCESS = {
         {
             'environments': [],
             'states': [
-                'uncompress', 'read_info', 'img_upload', 'update_db', 'deployed'
+                'uncompress', 'read_info', 'img_upload', 'deployed'
             ]
         }
     ]
@@ -88,6 +88,5 @@ STATE_DESC = {
 
     'uncompress': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
     'read_info': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_upload': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
-    'update_db': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 }
+    'img_upload': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 }
 }
