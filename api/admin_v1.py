@@ -109,6 +109,7 @@ def add_environment():
         new_env.img_size = json_data["img_size"]
         new_env.sector_start = json_data["sector_start"]
         new_env.ssh_user = json_data["ssh_user"]
+        new_env.state = json_data["state"]
         if json_data["web"] == "true" or json_data["web"] == "True" or json_data["web"] == 1:
             new_env.web = True
         else:
