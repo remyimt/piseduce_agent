@@ -34,8 +34,6 @@ if __name__ == '__main__':
     # Get the python module from the type of the nodes managed by this agent
     node_type = get_config()["node_type"]
     api_exec_mod = import_module("%s.api" % node_type)
-    # Add the environment names from the database to the config
-    getattr(api_exec_mod, "load_environments")()
     # Start the application
     port_number = get_config()["port_number"]
     agent_api.run(port=port_number, host="0.0.0.0")

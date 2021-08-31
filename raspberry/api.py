@@ -17,14 +17,6 @@ CONFIGURE_PROP = {
 }
 
 
-# Add the environments to the configuration
-def load_environments():
-    db = open_session()
-    env_names = [name[0] for name in db.query(distinct(RaspEnvironment.name)).all()]
-    close_session(db)
-    CONFIGURE_PROP["environment"] = { "values": env_names, "mandatory": True }
-
-
 def client_list(arg_dict):
     result = {}
     with open("/etc/dnsmasq.conf", "r") as dhcp_conf:
@@ -102,14 +94,16 @@ def node_configure(arg_dict):
     if "user" not in arg_dict or "@" not in arg_dict["user"]:
         return json.dumps({ "parameters": "user: 'email@is.fr'" })
     result = {}
+    # DB connection
+    db = open_session()
+    # Get the environment names
+    env_names = [name[0] for name in db.query(distinct(RaspEnvironment.name)).all()]
     # Common properties to every kind of nodes
     conf_prop = {
         "node_bin": { "values": [], "mandatory": True },
-        "environment": { "values": [], "mandatory": True },
+        "environment": { "values": env_names, "mandatory": True },
     }
     conf_prop.update(CONFIGURE_PROP)
-    # DB connection
-    db = open_session()
     # Get the nodes in the 'configuring' state
     nodes = db.query(Schedule
             ).filter(Schedule.owner == arg_dict["user"]
@@ -445,7 +439,7 @@ def node_reserve(arg_dict):
         # Get the node properties used in the filter
         node_props = {}
         if len(f) == 0:
-            nodes = db.query(RaspNode).all()
+            nodes = db.query(RaspNode).filter(RaspNode.name != "pimaster").all()
         else:
             query = db.query(RaspNode)
             wrong_filter = False

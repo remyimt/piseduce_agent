@@ -93,12 +93,6 @@ def build_server_list():
     return servers
 
 
-# Add the environments to the configuration
-def load_environments():
-    # No environment for iot-lab agents
-    pass
-
-
 def client_list(arg_dict):
     return json.dumps({ "error": "DHCP client list is not available from Iot-Lab agents" })
 

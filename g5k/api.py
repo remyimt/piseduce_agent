@@ -105,8 +105,23 @@ def status_to_reservations(node_status):
     return result
 
 
-# Add the environments to the configuration
-def load_environments():
+def client_list(arg_dict):
+    return json.dumps({ "error": "DHCP client list is not available from server agents" })
+
+
+def environment_list(arg_dict):
+    return json.dumps({ "error": "Environment list is not available from server agents" })
+
+
+def node_configure(arg_dict):
+    if "user" not in arg_dict or "@" not in arg_dict["user"]:
+        return json.dumps({
+            "parameters": {
+                "user": "email@is.fr"
+            }
+        })
+    result = {}
+    # The list of the g5k environments
     env_names = [
         "centos7-x64-min",
         "centos8-x64-min",
@@ -126,29 +141,10 @@ def load_environments():
         "ubuntu1804-x64-min",
         "ubuntu2004-x64-min"
     ]
-    CONFIGURE_PROP["environment"] = { "values": env_names, "mandatory": True }
-
-
-def client_list(arg_dict):
-    return json.dumps({ "error": "DHCP client list is not available from server agents" })
-
-
-def environment_list(arg_dict):
-    return json.dumps({ "error": "Environment list is not available from server agents" })
-
-
-def node_configure(arg_dict):
-    if "user" not in arg_dict or "@" not in arg_dict["user"]:
-        return json.dumps({
-            "parameters": {
-                "user": "email@is.fr"
-            }
-        })
-    result = {}
     # Common properties to every kind of nodes
-    env_names = CONFIGURE_PROP["environment"].keys()
     conf_prop = {
         "node_bin": { "values": [], "mandatory": True },
+        "environment": { "values": env_names, "mandatory": True }
     }
     conf_prop.update(CONFIGURE_PROP)
     # Get the jobs in the schedule by reading the DB
