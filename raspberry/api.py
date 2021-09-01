@@ -10,7 +10,6 @@ import json, logging, os, time
 
 # The required properties to configure the Raspberry nodes from the configure panel
 CONFIGURE_PROP = {
-    "update_os": { "values": [ "no", "yes" ], "mandatory": True },
     "part_size": { "values": [ "whole", "2gb", "5gb", "10gb" ], "mandatory": True },
     "os_password": { "values": [], "mandatory": False },
     "form_ssh_key": { "values": [], "mandatory": False }

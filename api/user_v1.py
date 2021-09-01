@@ -278,7 +278,6 @@ def configure():
         'soupirs-5': {
             'node_bin': { 'values': [], 'mandatory': True },
             'environment': { 'values': ['raspbian_buster_32bit'], 'mandatory': True },
-            'update_os': { 'values': ['no', 'yes'], 'mandatory': True },
             'form_ssh_key': { 'values': [], 'mandatory': False },
             'start_date': '2021-05-31 09:09:00',
             'end_date': '2021-05-31 13:09:00'
@@ -286,7 +285,6 @@ def configure():
         'soupirs-3': {
             'node_bin': {'values': [], 'mandatory': True},
             'environment': {'values': ['raspbian_buster_32bit'], 'mandatory': True},
-            'update_os': {'values': ['no', 'yes'], 'mandatory': True},
             'form_ssh_key': {'values': [], 'mandatory': False},
             'start_date': '2021-05-31 21:18:00',
             'end_date': '2021-06-01 01:18:00'

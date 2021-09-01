@@ -11,8 +11,7 @@ PROCESS = {
             'states': [
                 'boot_conf', 'turn_off', 'turn_on', 'ssh_test', 'env_copy', 'env_check', 
                 'delete_partition', 'create_partition', 'mount_partition', 'resize_partition',
-		'wait_resizing', 'system_conf', 'boot_files', 'ssh_test', 'system_update',
-                'boot_update', 'user_conf', 'deployed'
+		'wait_resizing', 'system_conf', 'boot_files', 'ssh_test', 'user_conf', 'deployed'
             ]
         }
     ],
@@ -78,8 +77,6 @@ STATE_DESC = {
     'wait_resizing': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 90 },
     'system_conf': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'boot_files': { 'exec': True, 'post': False, 'before_reboot': 20, 'lost': 5 },
-    'system_update': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
-    'boot_update': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'user_conf': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 1 },
     # Final state: exec is False, post is False and the 2 timeouts are infinite (0)
     'deployed': { 'exec': False, 'post': False, 'before_reboot': 0, 'lost': 0 },
