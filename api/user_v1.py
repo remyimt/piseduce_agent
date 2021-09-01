@@ -358,6 +358,21 @@ def hardreboot():
     return getattr(api_exec_mod, "node_hardreboot")(flask.request.json)
 
 
+@user_v1.route("/bootfiles", methods=["POST"])
+@auth
+def bootfiles():
+    """
+    Upload the boot files (/boot/*) to the TFTP server.
+    JSON parameters: 'user', 'nodes'.
+    Example of return value:
+    {
+        "node-1": "success",
+        "node-2": "success"
+    }
+    """
+    return getattr(api_exec_mod, "node_bootfiles")(flask.request.json)
+
+
 @user_v1.route("/deployagain", methods=["POST"])
 @auth
 def deployagain():

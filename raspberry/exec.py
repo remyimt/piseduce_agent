@@ -835,3 +835,19 @@ def img_upload_post(action, db):
     except (BadHostKeyException, AuthenticationException, SSHException, socket.error) as e:
         logging.warning("[%s] SSH connection failed" % action.node_name)
     return False
+
+
+# Update the boot files of the TFTP server
+def update_boot_files_exec(action, db):
+    serial = db.query(RaspNode).filter(RaspNode.name  == action.node_name).first().serial
+    ssh_user = db.query(RaspEnvironment).filter(RaspEnvironment.name == action.environment).first().ssh_user
+    # Copy boot files to the tftp directory
+    tftpboot_node_folder = "/tftpboot/%s" % serial
+    # Delete the existing tftp directory
+    shutil.rmtree(tftpboot_node_folder)
+    # Create an empty tftp directory
+    os.mkdir(tftpboot_node_folder)
+    cmd = "scp -o 'StrictHostKeyChecking no' -r %s@%s:/boot/* %s" % (
+        ssh_user, action.node_ip, tftpboot_node_folder)
+    subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return True

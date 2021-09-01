@@ -101,6 +101,12 @@ def environment_list(arg_dict):
     return json.dumps({ "error": "Environment list is not available from Iot-Lab agents" })
 
 
+def node_bootfiles(arg_dict):
+    return json.dumps({
+        "error": "Upload boot files is not available for Iot-Lab agents."
+    })
+
+
 def node_configure(arg_dict):
     if "user" not in arg_dict or "@" not in arg_dict["user"]:
         return json.dumps({

@@ -90,6 +90,42 @@ def environment_list(arg_dict):
     return json.dumps(result)
 
 
+def node_bootfiles(arg_dict):
+    result = {}
+    # Check POST data
+    if "nodes" not in arg_dict or "user" not in arg_dict:
+        return json.dumps({ "parameters": "nodes: ['name1', 'name2' ], user: 'email@is.fr'" })
+    wanted = arg_dict["nodes"]
+    user = arg_dict["user"]
+    if len(user) == 0 or '@' not in  user:
+        for n in wanted:
+            result[n] = "no_email"
+        return json.dumps(result)
+    # Get information about the requested nodes
+    db = open_session()
+    nodes = db.query(Schedule
+            ).filter(Schedule.node_name.in_(wanted)
+            ).filter(Schedule.owner == user
+            ).all()
+    for n in nodes:
+        if n.state == "ready":
+            # The deployment is completed, add a new action
+            node_action = new_action(n, db)
+            init_action_process(node_action, "bootfiles")
+            db.add(node_action)
+            result[n.node_name] = "success"
+        else:
+            logging.error("[%s] can not upload the boot files because the state is not 'ready' (state: %s)" % (
+                n.node_name, n.state))
+            result[n.node_name] = "failure: %s is not ready" % n.node_name
+    close_session(db)
+    # Build the result
+    for n in wanted:
+        if n not in result:
+            result[n] = "failure"
+    return json.dumps(result)
+
+
 def node_configure(arg_dict):
     if "user" not in arg_dict or "@" not in arg_dict["user"]:
         return json.dumps({ "parameters": "user: 'email@is.fr'" })

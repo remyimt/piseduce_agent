@@ -11,7 +11,7 @@ PROCESS = {
             'states': [
                 'boot_conf', 'turn_off', 'turn_on', 'ssh_test', 'env_copy', 'env_check', 
                 'delete_partition', 'create_partition', 'mount_partition', 'resize_partition',
-                'wait_resizing', 'system_conf', 'boot_files', 'ssh_test', 'system_update',
+		'wait_resizing', 'system_conf', 'boot_files', 'ssh_test', 'system_update',
                 'boot_update', 'user_conf', 'deployed'
             ]
         }
@@ -47,6 +47,14 @@ PROCESS = {
                 'uncompress', 'read_info', 'img_upload', 'deployed'
             ]
         }
+    ],
+    'bootfiles': [
+        {
+            'environments': [],
+            'states': [
+                'update_boot_files', 'deployed'
+            ]
+        }
     ]
 }
 
@@ -59,7 +67,7 @@ STATE_DESC = {
     'boot_conf': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'turn_off': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'turn_on': { 'exec': True, 'post': True, 'before_reboot': 60, 'lost': 90 },
-    # First boot of tinycore system can be very long
+    # First boot of picore systems can be very long
     'ssh_test': { 'exec': False, 'post': True, 'before_reboot': 300, 'lost': 330 },
     'env_copy': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 30 },
     'env_check': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 400 },
@@ -88,5 +96,7 @@ STATE_DESC = {
 
     'uncompress': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
     'read_info': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 0 },
-    'img_upload': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 }
+    'img_upload': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 0 },
+
+    'update_boot_files': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 30 }
 }

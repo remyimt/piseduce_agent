@@ -106,11 +106,17 @@ def status_to_reservations(node_status):
 
 
 def client_list(arg_dict):
-    return json.dumps({ "error": "DHCP client list is not available from server agents" })
+    return json.dumps({ "error": "DHCP client list is not available from g5k agents" })
 
 
 def environment_list(arg_dict):
-    return json.dumps({ "error": "Environment list is not available from server agents" })
+    return json.dumps({ "error": "Environment list is not available from g5k agents" })
+
+
+def node_bootfiles(arg_dict):
+    return json.dumps({
+        "error": "Upload boot files is not available for g5k agents."
+    })
 
 
 def node_configure(arg_dict):
@@ -666,4 +672,4 @@ def node_state(arg_dict):
 
 
 def switch_list(arg_dict):
-    return json.dumps({ "error": "Switch list is not available from server agents" })
+    return json.dumps({ "error": "Switch list is not available from g5k agents" })
