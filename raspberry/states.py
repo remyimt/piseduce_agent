@@ -60,7 +60,7 @@ STATE_DESC = {
     'turn_off': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },
     'turn_on': { 'exec': True, 'post': True, 'before_reboot': 60, 'lost': 90 },
     # First boot of tinycore system can be very long
-    'ssh_test': { 'exec': False, 'post': True, 'before_reboot': 360, 'lost': 390 },
+    'ssh_test': { 'exec': False, 'post': True, 'before_reboot': 300, 'lost': 330 },
     'env_copy': { 'exec': True, 'post': True, 'before_reboot': 0, 'lost': 30 },
     'env_check': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 400 },
     'delete_partition': { 'exec': True, 'post': False, 'before_reboot': 0, 'lost': 5 },

@@ -373,7 +373,7 @@ def system_conf_exec(action, db):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(action.node_ip, username = "root", timeout = SSH_TIMEOUT)
-        if action.environment.startswith("tiny_core"):
+        if action.environment.startswith("picore"):
             # Set the hostname to modify the bash prompt
             cmd = "sed -i 's/$/ host=%s/g' boot_dir/cmdline3.txt" % action.node_name
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
@@ -598,7 +598,7 @@ def user_conf_exec(action, db):
             cmd = "echo '%s' >> .ssh/authorized_keys" % my_ssh_keys
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
-        if action.environment == "tiny_core":
+        if action.environment.startswith("picore"):
             # Change the 'tc' user password
             cmd = "echo -e '%s\n%s' | sudo passwd tc; filetool.sh -b" % (os_password, os_password)
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
