@@ -286,16 +286,12 @@ def node_extend(arg_dict):
             ).filter(Schedule.owner == user
             ).all()
     for n in nodes:
-        # Allow users to extend their reservation 4 hours before the end_date
-        if n.end_date - now < 4 * 3600:
-            new_end_date = n.end_date + (n.end_date - n.start_date)
-            if new_end_date - n.start_date > 7 * 24 * 3600:
-                # The maximum duration of reservations is one week
-                new_end_date = n.start_date + 7 * 24 * 3600
-            n.end_date = new_end_date
-            result[n.node_name] = "success"
-        else:
-            result[n.node_name] = "failure: it is too early to extend the reservation"
+        new_end_date = n.end_date + (n.end_date - n.start_date)
+        if new_end_date - n.start_date > 7 * 24 * 3600:
+            # The maximum duration of reservations is one week
+            new_end_date = n.start_date + 7 * 24 * 3600
+        n.end_date = new_end_date
+        result[n.node_name] = "success"
     close_session(db)
     # Build the result
     for n in wanted:
