@@ -286,7 +286,7 @@ def mount_partition_post(action, db):
         return_code = stdout.channel.recv_exit_status()
         output = stdout.readlines()
         nb_files = int(output[-1].strip())
-        if nb_files < 2:
+        if nb_files < 1:
             logging.error("[%s] fs partition is not mounted" % action.node_name)
             return False
         return True
@@ -376,6 +376,9 @@ def system_conf_exec(action, db):
         if action.environment.startswith("picore"):
             # Set the hostname to modify the bash prompt
             cmd = "sed -i 's/$/ host=%s/g' boot_dir/cmdline3.txt" % action.node_name
+            (stdin, stdout, stderr) = ssh.exec_command(cmd)
+            return_code = stdout.channel.recv_exit_status()
+            cmd = "sed -i 's/$/ host=%s/g' boot_dir/cmdline.txt" % action.node_name
             (stdin, stdout, stderr) = ssh.exec_command(cmd)
             return_code = stdout.channel.recv_exit_status()
         if action.environment.startswith("ubuntu"):
@@ -655,11 +658,11 @@ def read_info_exec(action, db):
             elif first_sector in [ 526336 ]:
                 prefix = "ubuntu_"
                 ssh_user = "root"
-            elif first_sector in [ 195693 ]:
+            elif first_sector in [ 195693, 139264 ]:
                 prefix = "picore_"
                 ssh_user = "tc"
             else:
-                logging.error("[%s] Unknown sector_start %d" % (action.node_name, sector_start))
+                logging.error("[%s] Unknown sector_start %d" % (action.node_name, first_sector))
         else:
             logging.error("[%s] Wrong fdisk output '%s'" % (action.node_name, output))
         if prefix is None:
