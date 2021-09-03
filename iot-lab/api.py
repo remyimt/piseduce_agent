@@ -10,8 +10,8 @@ import json, logging, os, pytz, subprocess, time
 
 # The required properties to configure the iot-lab nodes from the configure panel
 CONFIGURE_PROP = {
-    "firmware": { "values": [], "mandatory": false },
-    "profile": { "values": [], "mandatory": false }
+    "firmware": { "values": [], "mandatory": False },
+    "profile": { "values": [], "mandatory": False }
 }
 
 
@@ -221,11 +221,11 @@ def node_deploy(arg_dict):
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
                 if process.returncode > 0:
                     if len(process.stdout) > 0:
-                        logging.error(process.stdout)
-                        result["error"] = [ process.stdout[-1] ]
+                        logging.error(process.stdout.split())
+                        result["error"] = [ process.stdout ]
                     elif len(process.stderr) > 0:
-                        logging.error(process.stderr)
-                        result["error"] = [ process.stderr[-1] ]
+                        logging.error(process.stderr.split("\n\t")[-1][:-1])
+                        result["error"] = [ process.stderr.split("\n\t")[-1][:-1] ]
                 else:
                     json_data = json.loads(process.stdout)
                     # Delete the iot_selection entry and create the schedule entry
