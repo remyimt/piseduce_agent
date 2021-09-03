@@ -31,6 +31,12 @@ if __name__ == '__main__':
         print(msg)
         logging.error(msg)
         sys.exit(13)
+    # Check the token syntax
+    if len(get_config()["auth_token"][0]) < 10:
+        msg = "Please, increase the length of the authorization token (at least 10 characters)"
+        print(msg)
+        logging.error(msg)
+        sys.exit(13)
     # Get the python module from the type of the nodes managed by this agent
     node_type = get_config()["node_type"]
     api_exec_mod = import_module("%s.api" % node_type)
