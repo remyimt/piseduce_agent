@@ -18,12 +18,12 @@ admin_v1 = flask.Blueprint("admin_v1", __name__)
 @auth
 def pimaster_node():
     db = open_session()
-    pimaster_ip = db.query(RaspNode).filter(RaspNode.name == "pimaster").first().ip
+    pimaster = db.query(RaspNode).filter(RaspNode.name == "pimaster").first()
+    pimaster_ip = "undefined"
+    if pimaster is not None:
+        pimaster_ip = pimaster.ip
     close_session(db)
-    if pimaster is None:
-        return json.dumps({ "ip": "undefined" })
-    else:
-        return json.dumps({ "ip": pimaster_ip })
+    return json.dumps({ "ip": pimaster_ip })
 
 
 @admin_v1.route("/pimaster/changeip", methods=["POST"])

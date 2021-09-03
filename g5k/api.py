@@ -11,7 +11,7 @@ import json, logging, os, pytz, requests, time
 
 # The required properties to configure the g5k nodes from the configure panel
 CONFIGURE_PROP = {
-    "form_ssh_key": { "values": [], "mandatory": false }
+    "form_ssh_key": { "values": [], "mandatory": False }
 }
 
 

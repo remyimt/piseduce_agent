@@ -61,8 +61,11 @@ def new_action(db_node, db):
     existing = db.query(Action).filter(Action.node_name == db_node.node_name).all()
     for e in existing:
         db.delete(e)
-    # Get the node IP
-    node_ip = db.query(RaspNode).filter(RaspNode.name == db_node.node_name).first().ip
+    # Get the node IP (only for Raspberry agents)
+    if get_config()["node_type"] == "raspberry":
+        node_ip = db.query(RaspNode).filter(RaspNode.name == db_node.node_name).first().ip
+    else:
+        node_ip = None
     # Add a new action
     act = Action()
     act_prop = db.query(ActionProperty
