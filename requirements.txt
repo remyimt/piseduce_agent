@@ -1,5 +1,9 @@
 flask
-paramiko
-sqlalchemy
-python-grid5000
+# for the iot-lab driver
 iotlabcli
+# for the agent-monitoring daemon
+influxdb
+paramiko
+# for the g5k driver
+python-grid5000
+sqlalchemy
