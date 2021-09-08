@@ -7,3 +7,5 @@ paramiko
 # for the g5k driver
 python-grid5000
 sqlalchemy
+# for the power monitoring of the switch
+influxdb
