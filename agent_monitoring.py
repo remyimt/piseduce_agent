@@ -29,6 +29,7 @@ influx.switch_database('monitoring')
 logging.info("The monitoring agent is running!")
 while True:
     start_time = datetime.utcnow()
+    record_time = datetime.utcnow()
     try:
         for s in db.query(RaspSwitch).all():
             if len(s.power_oid) > 5:
@@ -51,7 +52,7 @@ while True:
                 # Update the record_time to compute the elapsed time between to sleep.time()
                 record_time = datetime.utcnow()
     except:
-        record_time = datetime.utcnow()
+        logging.exception("Can not get the switch consumptions")
     diff_time = (record_time - start_time).total_seconds()
     if diff_time < 10:
         time.sleep(10 - diff_time)

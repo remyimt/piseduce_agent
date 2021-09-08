@@ -13,7 +13,10 @@ def switch_cons(ip, community, oid):
         power_state = [p.split(" = ") for p in power_state if len(p) > 0]
         if process.returncode == 0 and len(power_state) > 0:
             for p in power_state:
-                result.append(float(p[1].split()[-1].replace('"', '')))
+                if "INTEGER" in p[1]:
+                    result.append(int(p[1].split()[-1]) / 1000)
+                else:
+                    result.append(float(p[1].split()[-1].replace('"', '')))
     except:
         traceback.print_exc()
     return result
