@@ -2,6 +2,7 @@ from api.tool import safe_string
 from database.connector import open_session, close_session
 from database.tables import Action, ActionProperty, RaspEnvironment, RaspNode, Schedule, RaspSwitch
 from importlib import import_module
+from influxdb import InfluxDBClient
 from lib.config_loader import get_config
 from sqlalchemy import distinct, and_, or_
 from agent_exec import free_reserved_node, new_action, init_action_process, save_reboot_state
@@ -600,3 +601,22 @@ def switch_list(arg_dict):
     return json.dumps(result)
 
 
+def switch_consumption(arg_dict):
+    result = []
+    # Configure the influx client
+    influx = InfluxDBClient(host="localhost", port=8086)
+    influx_dbs = [info["name"] for info in influx.get_list_database()]
+    if "monitoring" not in influx_dbs:
+        logging.error("No 'monitoring' database")
+        return json.dumps({})
+    influx_query = "SELECT * FROM power_W WHERE "
+    if "period" in arg_dict:
+        influx_query += "time > now() - %s " % arg_dict["period"]
+    else:
+        influx_query += "time > now() - 1h "
+    if "switch" in arg_dict:
+        influx_query += "AND switch = '%s'" % arg_dict["switch"]
+    influx.switch_database('monitoring')
+    influx_res = influx.query(influx_query, epoch="s")
+    result += list(influx_res.get_points())
+    return json.dumps(result)

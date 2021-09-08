@@ -63,9 +63,10 @@ class RaspSwitch(Base):
     port_number = Column(Integer)
     master_port = Column(Integer)
     community = Column(Text)
-    oid = Column(Text)
+    poe_oid = Column(Text)
     oid_offset = Column(Integer)
     first_ip = Column(Integer)
+    power_oid = Column(Text)
 
 
 class RaspEnvironment(Base):

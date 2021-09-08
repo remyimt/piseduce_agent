@@ -205,13 +205,13 @@ def add_switch():
         checks["ip"]["check"] = ip_check
         if ip_check:
             # Remove the last digit of the OID
-            root_oid = switch_data["oid"]
+            root_oid = switch_data["poe_oid"]
             root_oid = root_oid[:root_oid.rindex(".")]
             switch_info = switch_test(switch_data["ip"], switch_data["community"], root_oid)
             # Check the SNMP connection
             snmp_check = switch_info["success"]
             checks["community"]["check"] = snmp_check
-            checks["oid"]["check"] = snmp_check
+            checks["poe_oid"]["check"] = snmp_check
         if ip_check and snmp_check:
             db = open_session()
             # Get information about existing switches to reserve the IP range for the nodes connected to the new switch
@@ -244,8 +244,11 @@ def add_switch():
             new_switch.port_number = switch_info["port_number"]
             new_switch.first_ip = last_digit
             new_switch.master_port = switch_data["master_port"]
-            new_switch.oid = switch_info["oid"]
+            new_switch.poe_oid = switch_info["poe_oid"]
             new_switch.oid_offset = switch_info["offset"]
+            # Remove the last digit of the OID
+            power_oid = switch_data["power_oid"]
+            new_switch.power_oid = power_oid[:power_oid.rindex(".")]
             db.add(new_switch)
             close_session(db)
             return json.dumps({ "switch": switch_data["name"] })

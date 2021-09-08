@@ -673,3 +673,7 @@ def node_state(arg_dict):
 
 def switch_list(arg_dict):
     return json.dumps({ "error": "Switch list is not available from g5k agents" })
+
+
+def switch_consumption(arg_dict):
+    return json.dumps({ "error": "Switch consumption is not available from g5k agents" })

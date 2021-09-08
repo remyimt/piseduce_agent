@@ -43,12 +43,45 @@ def switch_list():
             'port_nb': '8',
             'first_ip': '1',
             'master_port': '8',
-            'oid': 'iso.3.6.1.2.1.105.1.1.1.3.1',
-            'oid_offset': '48'
+            'poe_oid': 'iso.3.6.1.2.1.105.1.1.1.3.1',
+            'oid_offset': '48',
+            'power_oid': 'iso.3.6.1.2.1.105.1.1.1.3.1'
         }
     }
     """
     return getattr(api_exec_mod, "switch_list")(flask.request.json)
+
+
+# List the switches (only used by administrators but the URL must be in /user/)
+@user_v1.route("/switch/consumption", methods=["POST"])
+@auth
+def switch_consumption():
+    """
+    Read the power consumption of the ports of the switch from the Influx DB.
+    JSON parameters: 'period'
+    Example of return value:
+    [
+        {
+            "time": 1631101186,
+            "consumption": 4.9,
+            "port": "1",
+            "switch": "RPI3_SW"
+        },
+        {
+            "time": 1631101188,
+            "consumption": 0.0,
+            "port": "24",
+            "switch": "RPI4_SW"
+        },
+        {
+            "time": 1631101186,
+            "consumption": 0.0,
+            "port": "17",
+            "switch": "RPI3_SW"
+        }
+    ]
+    """
+    return getattr(api_exec_mod, "switch_consumption")(flask.request.json)
 
 
 @user_v1.route("/environment/register", methods=["POST"])
