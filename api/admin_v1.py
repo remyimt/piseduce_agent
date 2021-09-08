@@ -391,11 +391,11 @@ def dhcp_conf(switch_name):
         if len(line) > 0:
             now = datetime.now()
             # Hour with the format "%H:%M:%S"
-            hour = line.split(" ")[2].split(":")
+            hour = line.split()[2].split(":")
             log_date = now.replace(hour = int(hour[0]), minute = int(hour[1]), second = int(hour[2]))
             logging.info("Last DHCP request at %s" % log_date)
-            if (now - log_date).seconds < 10:
-                mac = line.split(" ")[7]
+            if (now - log_date).seconds < 20:
+                mac = line.split()[7]
                 if len(mac) == 17 and (mac.startswith("dc:a6:32") or mac.startswith("b8:27:eb")):
                     if mac in known_macs:
                         logging.error("[%s] MAC '%s' already exists in the DHCP configuration" % (node_name, mac))
@@ -511,6 +511,8 @@ def node_conf(switch_name):
             close_session(db)
     except (AuthenticationException, SSHException, socket.error):
         logging.warn("[node-%s] can not connect via SSH to %s" % (node_port, node_ip))
+    except:
+        logging.exception("[node-%s] node configuration fails" % node_port)
     return json.dumps(result)
 
 
