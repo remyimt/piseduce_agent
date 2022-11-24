@@ -23,4 +23,4 @@ The **piseduce_agent** project manages the user reservations and the resources o
 infrastructure, e.g., the Raspberrys. To manage the Raspberrys, the agent can connect to them via
 SSH connections.
 
-[Read More](https://doc.seduce.fr/2021-07-22-manager-basis/)
+[Read More](https://github.com/remyimt/piseduce_doc)
